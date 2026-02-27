@@ -29,6 +29,9 @@ public class CupertinoNativePlugin: NSObject, FlutterPlugin {
 
     let buttonFactory = CupertinoButtonViewFactory(messenger: registrar.messenger())
     registrar.register(buttonFactory, withId: "CupertinoNativeButton")
+
+    let searchBarFactory = CupertinoSearchBarViewFactory(messenger: registrar.messenger())
+    registrar.register(searchBarFactory, withId: "CupertinoNativeSearchBar")
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

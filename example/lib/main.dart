@@ -7,6 +7,7 @@ import 'demos/tab_bar.dart';
 import 'demos/icon.dart';
 import 'demos/popup_menu_button.dart';
 import 'demos/button.dart';
+import 'demos/search_bar.dart';
 
 void main() {
   runApp(const MyApp());
@@ -195,6 +196,19 @@ class HomePage extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     CupertinoPageRoute(builder: (_) => const ButtonDemoPage()),
+                  );
+                },
+              ),
+              CupertinoListTile(
+                title: Text('Search Bar'),
+                leading: CNIcon(
+                  symbol: CNSymbol('magnifyingglass', color: accentColor),
+                ),
+                trailing: CupertinoListTileChevron(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    CupertinoPageRoute(
+                        builder: (_) => const SearchBarDemoPage()),
                   );
                 },
               ),
