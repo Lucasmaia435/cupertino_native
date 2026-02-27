@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show TabController, TabBarView;
+import 'package:flutter/material.dart' show Icons, TabBarView, TabController;
 import 'package:cupertino_native/cupertino_native.dart';
 
 class TabBarDemoPage extends StatefulWidget {
@@ -9,8 +9,7 @@ class TabBarDemoPage extends StatefulWidget {
   State<TabBarDemoPage> createState() => _TabBarDemoPageState();
 }
 
-class _TabBarDemoPageState extends State<TabBarDemoPage>
-    with SingleTickerProviderStateMixin {
+class _TabBarDemoPageState extends State<TabBarDemoPage> with SingleTickerProviderStateMixin {
   late final TabController _controller;
   int _index = 0;
 
@@ -33,9 +32,7 @@ class _TabBarDemoPageState extends State<TabBarDemoPage>
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Native Tab Bar'),
-      ),
+      navigationBar: const CupertinoNavigationBar(middle: Text('Native Tab Bar')),
       child: Stack(
         children: [
           // Content below
@@ -54,21 +51,15 @@ class _TabBarDemoPageState extends State<TabBarDemoPage>
           Align(
             alignment: Alignment.bottomCenter,
             child: CNTabBar(
-              items: const [
-                CNTabBarItem(label: 'Home', icon: CNSymbol('house.fill')),
-                CNTabBarItem(
-                  label: 'Profile',
-                  icon: CNSymbol('person.crop.circle'),
-                ),
-                CNTabBarItem(
-                  label: 'Settings',
-                  icon: CNSymbol('gearshape.fill'),
-                ),
-                CNTabBarItem(icon: CNSymbol('magnifyingglass')),
+              iconSize: 24,
+              items: [
+                CNTabBarItem(label: 'Dashboard', iconData: Icons.house_outlined),
+                CNTabBarItem(label: 'Journal', iconData: Icons.book_outlined),
+                CNTabBarItem(label: 'Goals', iconData: Icons.flag_outlined),
+                CNTabBarItem(iconData: Icons.more_horiz_outlined, label: 'More'),
               ],
               currentIndex: _index,
-              split: true,
-              rightCount: 1,
+              rightCount: 0,
               shrinkCentered: true,
               onTap: (i) {
                 setState(() => _index = i);
@@ -97,18 +88,9 @@ class _ImageTabPage extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: CupertinoColors.black.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: CupertinoColors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.only(top: 12),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 18,
-                color: CupertinoColors.white,
-              ),
-            ),
+            child: Text(label, style: const TextStyle(fontSize: 18, color: CupertinoColors.white)),
           ),
         ),
       ],
