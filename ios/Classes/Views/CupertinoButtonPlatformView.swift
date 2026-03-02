@@ -1,7 +1,16 @@
 import Flutter
 import UIKit
+import CoreText
 
 class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
+  private struct FlutterFontManifestEntry {
+    let family: String
+    let assets: [String]
+  }
+
+  private static var cachedFlutterAssetsURL: URL?
+  private static var cachedFontManifest: [FlutterFontManifestEntry]?
+
   private let channel: FlutterMethodChannel
   private let container: UIView
   private let button: UIButton
@@ -24,6 +33,10 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     var enabled: Bool = true
     var iconMode: String? = nil
     var iconPalette: [NSNumber] = []
+    var iconDataCodePoint: Int? = nil
+    var iconDataFontFamily: String? = nil
+    var iconDataFontPackage: String? = nil
+    var iconDataMatchDirection: Bool = false
 
     if let dict = args as? [String: Any] {
       if let t = dict["buttonTitle"] as? String { title = t }
@@ -37,6 +50,18 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       if let e = dict["enabled"] as? NSNumber { enabled = e.boolValue }
       if let m = dict["buttonIconRenderingMode"] as? String { iconMode = m }
       if let pal = dict["buttonIconPaletteColors"] as? [NSNumber] { iconPalette = pal }
+      if let cp = dict["buttonIconDataCodePoint"] as? NSNumber {
+        iconDataCodePoint = cp.intValue
+      }
+      if let family = dict["buttonIconDataFontFamily"] as? String {
+        iconDataFontFamily = family
+      }
+      if let package = dict["buttonIconDataFontPackage"] as? String {
+        iconDataFontPackage = package
+      }
+      if let match = dict["buttonIconDataMatchTextDirection"] as? NSNumber {
+        iconDataMatchDirection = match.boolValue
+      }
     }
 
     super.init()
@@ -93,6 +118,19 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         image = image.withTintColor(col, renderingMode: .alwaysOriginal)
       }
       finalImage = image
+    } else if let codePoint = iconDataCodePoint {
+      let pointSize = iconSize ?? 20
+      if var image = Self.iconImage(
+        codePoint: codePoint,
+        fontFamily: iconDataFontFamily,
+        fontPackage: iconDataFontPackage,
+        pointSize: pointSize
+      ) {
+        if iconDataMatchDirection {
+          image = image.imageFlippedForRightToLeftLayoutDirection()
+        }
+        finalImage = image
+      }
     }
     setButtonContent(title: title, image: finalImage, iconOnly: (title == nil))
 
@@ -137,40 +175,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         } else { result(FlutterError(code: "bad_args", message: "Missing title", details: nil)) }
       case "setButtonIcon":
         if let args = call.arguments as? [String: Any] {
-          var image: UIImage? = nil
-          if let name = args["buttonIconName"] as? String { image = UIImage(systemName: name) }
-          if let s = args["buttonIconSize"] as? NSNumber, let img = image {
-            image = img.applyingSymbolConfiguration(UIImage.SymbolConfiguration(pointSize: CGFloat(truncating: s))) ?? img
-          }
-          if let mode = args["buttonIconRenderingMode"] as? String, let img0 = image {
-            var img = img0
-            switch mode {
-            case "hierarchical":
-              if #available(iOS 15.0, *), let c = args["buttonIconColor"] as? NSNumber {
-                let cfg = UIImage.SymbolConfiguration(hierarchicalColor: Self.colorFromARGB(c.intValue))
-                image = img.applyingSymbolConfiguration(cfg) ?? img
-              }
-            case "palette":
-              if #available(iOS 15.0, *), let pal = args["buttonIconPaletteColors"] as? [NSNumber] {
-                let cols = pal.map { Self.colorFromARGB($0.intValue) }
-                let cfg = UIImage.SymbolConfiguration(paletteColors: cols)
-                image = img.applyingSymbolConfiguration(cfg) ?? img
-              }
-            case "multicolor":
-              if #available(iOS 15.0, *) {
-                let cfg = UIImage.SymbolConfiguration.preferringMulticolor()
-                image = img.applyingSymbolConfiguration(cfg) ?? img
-              }
-            case "monochrome":
-              if let c = args["buttonIconColor"] as? NSNumber, #available(iOS 13.0, *) {
-                image = img.withTintColor(Self.colorFromARGB(c.intValue), renderingMode: .alwaysOriginal)
-              }
-            default:
-              break
-            }
-          } else if let c = args["buttonIconColor"] as? NSNumber, let img = image, #available(iOS 13.0, *) {
-            image = img.withTintColor(Self.colorFromARGB(c.intValue), renderingMode: .alwaysOriginal)
-          }
+          let image = Self.buttonImage(from: args)
           self.setButtonContent(title: nil, image: image, iconOnly: true)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing icon args", details: nil)) }
@@ -190,6 +195,238 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   @objc private func onPressed(_ sender: UIButton) {
     guard isEnabled else { return }
     channel.invokeMethod("pressed", arguments: nil)
+  }
+
+  private static func buttonImage(from args: [String: Any]) -> UIImage? {
+    let pointSize = (args["buttonIconSize"] as? NSNumber).map { CGFloat(truncating: $0) }
+
+    if let name = args["buttonIconName"] as? String, var image = UIImage(systemName: name) {
+      if let size = pointSize {
+        image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(pointSize: size)) ?? image
+      }
+      if let mode = args["buttonIconRenderingMode"] as? String {
+        switch mode {
+        case "hierarchical":
+          if #available(iOS 15.0, *), let c = args["buttonIconColor"] as? NSNumber {
+            let cfg = UIImage.SymbolConfiguration(hierarchicalColor: Self.colorFromARGB(c.intValue))
+            image = image.applyingSymbolConfiguration(cfg) ?? image
+          }
+        case "palette":
+          if #available(iOS 15.0, *), let pal = args["buttonIconPaletteColors"] as? [NSNumber] {
+            let cols = pal.map { Self.colorFromARGB($0.intValue) }
+            let cfg = UIImage.SymbolConfiguration(paletteColors: cols)
+            image = image.applyingSymbolConfiguration(cfg) ?? image
+          }
+        case "multicolor":
+          if #available(iOS 15.0, *) {
+            let cfg = UIImage.SymbolConfiguration.preferringMulticolor()
+            image = image.applyingSymbolConfiguration(cfg) ?? image
+          }
+        case "monochrome":
+          if let c = args["buttonIconColor"] as? NSNumber, #available(iOS 13.0, *) {
+            image = image.withTintColor(Self.colorFromARGB(c.intValue), renderingMode: .alwaysOriginal)
+          }
+        default:
+          break
+        }
+      } else if let c = args["buttonIconColor"] as? NSNumber, #available(iOS 13.0, *) {
+        image = image.withTintColor(Self.colorFromARGB(c.intValue), renderingMode: .alwaysOriginal)
+      }
+      return image
+    }
+
+    guard let codePoint = (args["buttonIconDataCodePoint"] as? NSNumber)?.intValue else {
+      return nil
+    }
+    let fontFamily = args["buttonIconDataFontFamily"] as? String
+    let fontPackage = args["buttonIconDataFontPackage"] as? String
+    let size = pointSize ?? 20
+    guard var image = iconImage(
+      codePoint: codePoint,
+      fontFamily: fontFamily,
+      fontPackage: fontPackage,
+      pointSize: size
+    ) else {
+      return nil
+    }
+    if let match = (args["buttonIconDataMatchTextDirection"] as? NSNumber)?.boolValue, match {
+      image = image.imageFlippedForRightToLeftLayoutDirection()
+    }
+    return image
+  }
+
+  private static func iconImage(
+    codePoint: Int,
+    fontFamily: String?,
+    fontPackage: String?,
+    pointSize: CGFloat
+  ) -> UIImage? {
+    guard let scalar = UnicodeScalar(codePoint) else { return nil }
+    let glyph = String(scalar) as NSString
+    let resolvedFont = loadIconFont(
+      family: fontFamily,
+      package: fontPackage,
+      pointSize: pointSize
+    ) ?? UIFont.systemFont(ofSize: pointSize)
+    let canvasSize = CGSize(width: pointSize * 1.8, height: pointSize * 1.8)
+    let renderer = UIGraphicsImageRenderer(size: canvasSize)
+    let image = renderer.image { _ in
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.alignment = .center
+      let attrs: [NSAttributedString.Key: Any] = [
+        .font: resolvedFont,
+        .foregroundColor: UIColor.white,
+        .paragraphStyle: paragraph
+      ]
+      let glyphSize = glyph.size(withAttributes: attrs)
+      let rect = CGRect(
+        x: (canvasSize.width - glyphSize.width) / 2.0,
+        y: (canvasSize.height - glyphSize.height) / 2.0,
+        width: glyphSize.width,
+        height: glyphSize.height
+      )
+      glyph.draw(in: rect, withAttributes: attrs)
+    }
+    return image.withRenderingMode(.alwaysTemplate)
+  }
+
+  private static func loadIconFont(
+    family: String?,
+    package: String?,
+    pointSize: CGFloat
+  ) -> UIFont? {
+    guard let family else { return nil }
+    ensureFlutterFontRegistered(family: family, package: package)
+
+    let directCandidates = directFontNameCandidates(
+      family: family,
+      package: package
+    )
+    for candidate in directCandidates {
+      if let font = UIFont(name: candidate, size: pointSize) {
+        return font
+      }
+    }
+
+    let wanted = normalizedFontToken(family)
+    for familyName in UIFont.familyNames {
+      let familyToken = normalizedFontToken(familyName)
+      if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
+        if let font = UIFont(name: familyName, size: pointSize) {
+          return font
+        }
+      }
+      for fontName in UIFont.fontNames(forFamilyName: familyName) {
+        let fontToken = normalizedFontToken(fontName)
+        if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
+          if let font = UIFont(name: fontName, size: pointSize) {
+            return font
+          }
+        }
+      }
+    }
+    return nil
+  }
+
+  private static func directFontNameCandidates(family: String, package: String?) -> [String] {
+    var candidates: [String] = []
+    if let package {
+      candidates.append("packages/\(package)/\(family)")
+      candidates.append("\(package)/\(family)")
+    }
+    candidates.append(family)
+    candidates.append("\(family)-Regular")
+    candidates.append(family.replacingOccurrences(of: "_", with: " "))
+    candidates.append(family.replacingOccurrences(of: "_", with: "") + "-Regular")
+    if family == "MaterialIcons" {
+      candidates.append("Material Icons")
+      candidates.append("MaterialIcons-Regular")
+    }
+    if family == "CupertinoIcons" {
+      candidates.append("Cupertino Icons")
+    }
+    return Array(Set(candidates))
+  }
+
+  private static func normalizedFontToken(_ text: String) -> String {
+    let allowed = CharacterSet.alphanumerics
+    return text.lowercased().unicodeScalars
+      .filter { allowed.contains($0) }
+      .map(String.init)
+      .joined()
+  }
+
+  private static func ensureFlutterFontRegistered(family: String, package: String?) {
+    let manifest = loadFontManifest()
+    guard !manifest.isEmpty else { return }
+    let candidates = [
+      family,
+      package != nil ? "packages/\(package!)/\(family)" : nil
+    ].compactMap { $0 }
+    for candidate in candidates {
+      let entries = manifest.filter { $0.family == candidate }
+      for entry in entries {
+        registerFontAssets(entry.assets)
+      }
+    }
+  }
+
+  private static func registerFontAssets(_ assets: [String]) {
+    guard let assetsRoot = flutterAssetsURL() else { return }
+    for asset in assets {
+      let fileURL = assetsRoot.appendingPathComponent(asset)
+      guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+      CTFontManagerRegisterFontsForURL(fileURL as CFURL, .process, nil)
+    }
+  }
+
+  private static func loadFontManifest() -> [FlutterFontManifestEntry] {
+    if let cachedFontManifest {
+      return cachedFontManifest
+    }
+    guard let assetsRoot = flutterAssetsURL() else {
+      cachedFontManifest = []
+      return []
+    }
+    let manifestURL = assetsRoot.appendingPathComponent("FontManifest.json")
+    guard let data = try? Data(contentsOf: manifestURL),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+      cachedFontManifest = []
+      return []
+    }
+
+    let parsed = json.compactMap { item -> FlutterFontManifestEntry? in
+      guard let family = item["family"] as? String else { return nil }
+      let fonts = (item["fonts"] as? [[String: Any]]) ?? []
+      let assets = fonts.compactMap { $0["asset"] as? String }
+      return FlutterFontManifestEntry(family: family, assets: assets)
+    }
+    cachedFontManifest = parsed
+    return parsed
+  }
+
+  private static func flutterAssetsURL() -> URL? {
+    if let cachedFlutterAssetsURL {
+      return cachedFlutterAssetsURL
+    }
+    let candidates: [URL?] = [
+      Bundle.main.resourceURL?.appendingPathComponent("flutter_assets"),
+      Bundle.main.privateFrameworksURL?
+        .appendingPathComponent("App.framework")
+        .appendingPathComponent("flutter_assets"),
+      URL(fileURLWithPath: Bundle.main.bundlePath)
+        .appendingPathComponent("Frameworks")
+        .appendingPathComponent("App.framework")
+        .appendingPathComponent("flutter_assets")
+    ]
+    for candidate in candidates.compactMap({ $0 }) {
+      var isDir: ObjCBool = false
+      if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDir), isDir.boolValue {
+        cachedFlutterAssetsURL = candidate
+        return candidate
+      }
+    }
+    return nil
   }
 
   private static func colorFromARGB(_ argb: Int) -> UIColor {

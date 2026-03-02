@@ -22,30 +22,44 @@ class CNButton extends StatefulWidget {
     this.height = 32.0,
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
-  }) : icon = null,
-       width = null,
-       round = false;
+  })  : icon = null,
+        iconData = null,
+        width = null,
+        round = false;
 
   /// Creates a round, icon-only variant of [CNButton].
   const CNButton.icon({
     super.key,
-    required this.icon,
+    this.icon,
+    this.iconData,
     this.onPressed,
     this.enabled = true,
     this.tint,
     double size = 44.0,
     this.style = CNButtonStyle.glass,
-  }) : label = null,
-       round = true,
-       width = size,
-       height = size,
-       shrinkWrap = false,
-       super();
+  })  : assert(
+          icon == null || iconData == null,
+          'Use either icon (CNSymbol) or iconData (IconData), not both.',
+        ),
+        assert(
+          icon != null || iconData != null,
+          'Provide icon (CNSymbol) or iconData (IconData).',
+        ),
+        label = null,
+        round = true,
+        width = size,
+        height = size,
+        shrinkWrap = false,
+        super();
 
   /// Button text (null in icon mode).
   final String? label; // null in icon mode
-  /// Button icon (non-null in icon mode).
-  final CNSymbol? icon; // non-null in icon mode
+  /// Button icon using SF Symbols.
+  final CNSymbol? icon;
+
+  /// Button icon using Flutter [IconData].
+  final IconData? iconData;
+
   /// Callback when pressed.
   final VoidCallback? onPressed;
 
@@ -70,7 +84,7 @@ class CNButton extends StatefulWidget {
   final bool round;
 
   /// Whether this instance is configured as the icon variant.
-  bool get isIcon => icon != null;
+  bool get isIcon => icon != null || iconData != null;
 
   @override
   State<CNButton> createState() => _CNButtonState();
@@ -82,6 +96,10 @@ class _CNButtonState extends State<CNButton> {
   int? _lastTint;
   String? _lastTitle;
   String? _lastIconName;
+  int? _lastIconCodePoint;
+  String? _lastIconFontFamily;
+  String? _lastIconFontPackage;
+  bool? _lastIconMatchTextDirection;
   double? _lastIconSize;
   int? _lastIconColor;
   double? _intrinsicWidth;
@@ -130,7 +148,10 @@ class _CNButtonState extends State<CNButton> {
               ? widget.onPressed
               : null,
           child: widget.isIcon
-              ? Icon(CupertinoIcons.ellipsis, size: widget.icon?.size)
+              ? Icon(
+                  widget.iconData ?? CupertinoIcons.ellipsis,
+                  size: widget.icon?.size,
+                )
               : Text(widget.label ?? ''),
         ),
       );
@@ -152,6 +173,14 @@ class _CNButtonState extends State<CNButton> {
             .toList(),
       if (widget.icon?.gradient != null)
         'buttonIconGradientEnabled': widget.icon!.gradient,
+      if (widget.iconData != null)
+        'buttonIconDataCodePoint': widget.iconData!.codePoint,
+      if (widget.iconData != null)
+        'buttonIconDataFontFamily': widget.iconData!.fontFamily,
+      if (widget.iconData != null)
+        'buttonIconDataFontPackage': widget.iconData!.fontPackage,
+      if (widget.iconData != null)
+        'buttonIconDataMatchTextDirection': widget.iconData!.matchTextDirection,
       if (widget.isIcon) 'round': true,
       'buttonStyle': widget.style.name,
       'enabled': (widget.enabled && widget.onPressed != null),
@@ -230,6 +259,10 @@ class _CNButtonState extends State<CNButton> {
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
+    _lastIconCodePoint = widget.iconData?.codePoint;
+    _lastIconFontFamily = widget.iconData?.fontFamily;
+    _lastIconFontPackage = widget.iconData?.fontPackage;
+    _lastIconMatchTextDirection = widget.iconData?.matchTextDirection;
     _lastIconSize = widget.icon?.size;
     _lastIconColor = resolveColorToArgb(widget.icon?.color, context);
     _lastStyle = widget.style;
@@ -266,6 +299,10 @@ class _CNButtonState extends State<CNButton> {
     if (ch == null) return;
     final tint = resolveColorToArgb(_effectiveTint, context);
     final preIconName = widget.icon?.name;
+    final preIconCodePoint = widget.iconData?.codePoint;
+    final preIconFontFamily = widget.iconData?.fontFamily;
+    final preIconFontPackage = widget.iconData?.fontPackage;
+    final preIconMatchTextDirection = widget.iconData?.matchTextDirection;
     final preIconSize = widget.icon?.size;
     final preIconColor = resolveColorToArgb(widget.icon?.color, context);
 
@@ -292,9 +329,14 @@ class _CNButtonState extends State<CNButton> {
       final iconSize = preIconSize;
       final iconColor = preIconColor;
       final updates = <String, dynamic>{};
-      if (_lastIconName != iconName && iconName != null) {
+      if (iconName != null &&
+          (_lastIconName != iconName || _lastIconCodePoint != null)) {
         updates['buttonIconName'] = iconName;
         _lastIconName = iconName;
+        _lastIconCodePoint = null;
+        _lastIconFontFamily = null;
+        _lastIconFontPackage = null;
+        _lastIconMatchTextDirection = null;
       }
       if (_lastIconSize != iconSize && iconSize != null) {
         updates['buttonIconSize'] = iconSize;
@@ -303,6 +345,23 @@ class _CNButtonState extends State<CNButton> {
       if (_lastIconColor != iconColor && iconColor != null) {
         updates['buttonIconColor'] = iconColor;
         _lastIconColor = iconColor;
+      }
+      final iconDataChanged = _lastIconCodePoint != preIconCodePoint ||
+          _lastIconFontFamily != preIconFontFamily ||
+          _lastIconFontPackage != preIconFontPackage ||
+          _lastIconMatchTextDirection != preIconMatchTextDirection ||
+          _lastIconName != null;
+      if (iconDataChanged && preIconCodePoint != null) {
+        updates['buttonIconDataCodePoint'] = preIconCodePoint;
+        updates['buttonIconDataFontFamily'] = preIconFontFamily;
+        updates['buttonIconDataFontPackage'] = preIconFontPackage;
+        updates['buttonIconDataMatchTextDirection'] =
+            preIconMatchTextDirection ?? false;
+        _lastIconCodePoint = preIconCodePoint;
+        _lastIconFontFamily = preIconFontFamily;
+        _lastIconFontPackage = preIconFontPackage;
+        _lastIconMatchTextDirection = preIconMatchTextDirection;
+        _lastIconName = null;
       }
       if (widget.icon?.mode != null) {
         updates['buttonIconRenderingMode'] = widget.icon!.mode!.name;
