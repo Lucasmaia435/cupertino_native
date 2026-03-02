@@ -24,6 +24,7 @@ class CNButton extends StatefulWidget {
     this.style = CNButtonStyle.plain,
   })  : icon = null,
         iconData = null,
+        iconDataSize = null,
         width = null,
         round = false;
 
@@ -32,6 +33,7 @@ class CNButton extends StatefulWidget {
     super.key,
     this.icon,
     this.iconData,
+    this.iconDataSize,
     this.onPressed,
     this.enabled = true,
     this.tint,
@@ -44,6 +46,10 @@ class CNButton extends StatefulWidget {
         assert(
           icon != null || iconData != null,
           'Provide icon (CNSymbol) or iconData (IconData).',
+        ),
+        assert(
+          icon == null || iconDataSize == null,
+          'iconDataSize can only be used with iconData.',
         ),
         label = null,
         round = true,
@@ -59,6 +65,9 @@ class CNButton extends StatefulWidget {
 
   /// Button icon using Flutter [IconData].
   final IconData? iconData;
+
+  /// Icon size used when [iconData] is provided.
+  final double? iconDataSize;
 
   /// Callback when pressed.
   final VoidCallback? onPressed;
@@ -108,6 +117,7 @@ class _CNButtonState extends State<CNButton> {
   bool _pressed = false;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
+  double? get _effectiveIconSize => widget.icon?.size ?? widget.iconDataSize;
 
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
@@ -150,7 +160,7 @@ class _CNButtonState extends State<CNButton> {
           child: widget.isIcon
               ? Icon(
                   widget.iconData ?? CupertinoIcons.ellipsis,
-                  size: widget.icon?.size,
+                  size: _effectiveIconSize,
                 )
               : Text(widget.label ?? ''),
         ),
@@ -162,7 +172,7 @@ class _CNButtonState extends State<CNButton> {
     final creationParams = <String, dynamic>{
       if (widget.label != null) 'buttonTitle': widget.label,
       if (widget.icon != null) 'buttonIconName': widget.icon!.name,
-      if (widget.icon?.size != null) 'buttonIconSize': widget.icon!.size,
+      if (_effectiveIconSize != null) 'buttonIconSize': _effectiveIconSize,
       if (widget.icon?.color != null)
         'buttonIconColor': resolveColorToArgb(widget.icon!.color, context),
       if (widget.icon?.mode != null)
@@ -263,7 +273,7 @@ class _CNButtonState extends State<CNButton> {
     _lastIconFontFamily = widget.iconData?.fontFamily;
     _lastIconFontPackage = widget.iconData?.fontPackage;
     _lastIconMatchTextDirection = widget.iconData?.matchTextDirection;
-    _lastIconSize = widget.icon?.size;
+    _lastIconSize = _effectiveIconSize;
     _lastIconColor = resolveColorToArgb(widget.icon?.color, context);
     _lastStyle = widget.style;
     if (!widget.isIcon) {
@@ -303,7 +313,7 @@ class _CNButtonState extends State<CNButton> {
     final preIconFontFamily = widget.iconData?.fontFamily;
     final preIconFontPackage = widget.iconData?.fontPackage;
     final preIconMatchTextDirection = widget.iconData?.matchTextDirection;
-    final preIconSize = widget.icon?.size;
+    final preIconSize = _effectiveIconSize;
     final preIconColor = resolveColorToArgb(widget.icon?.color, context);
 
     if (_lastTint != tint && tint != null) {
@@ -338,7 +348,7 @@ class _CNButtonState extends State<CNButton> {
         _lastIconFontPackage = null;
         _lastIconMatchTextDirection = null;
       }
-      if (_lastIconSize != iconSize && iconSize != null) {
+      if (_lastIconSize != iconSize) {
         updates['buttonIconSize'] = iconSize;
         _lastIconSize = iconSize;
       }
