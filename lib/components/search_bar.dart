@@ -74,9 +74,11 @@ class CNSearchBar extends StatefulWidget {
     required this.onChanged,
     this.onSubmitted,
     this.onCancelled,
+    this.onTrailingPressed,
     this.placeholder,
     this.enabled = true,
     this.showsCancelButton = false,
+    this.trailingIcon,
     this.controller,
     this.height = 56.0,
     this.tint,
@@ -96,6 +98,9 @@ class CNSearchBar extends StatefulWidget {
   /// Called when the native cancel action is triggered.
   final VoidCallback? onCancelled;
 
+  /// Called when the trailing icon button is pressed.
+  final VoidCallback? onTrailingPressed;
+
   /// Optional placeholder string.
   final String? placeholder;
 
@@ -104,6 +109,11 @@ class CNSearchBar extends StatefulWidget {
 
   /// Whether to display the cancel button (mainly relevant on iOS).
   final bool showsCancelButton;
+
+  /// Optional trailing icon button rendered by the native search field.
+  ///
+  /// Uses Flutter [IconData] (e.g. `CupertinoIcons` or `Icons`).
+  final IconData? trailingIcon;
 
   /// Optional controller for imperative interactions.
   final CNSearchBarController? controller;
@@ -136,6 +146,11 @@ class _CNSearchBarState extends State<CNSearchBar> {
   int? _lastTint;
   int? _lastBackground;
   int? _lastFieldBackground;
+  String? _lastTrailingIconName;
+  String? _lastTrailingIconFontFamily;
+  String? _lastTrailingIconFontPackage;
+  bool? _lastTrailingIconMatchTextDirection;
+  bool? _lastTrailingIconEnabled;
 
   CNSearchBarController? _internalController;
 
@@ -164,6 +179,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _syncBrightnessIfNeeded();
+    _syncPropsToNativeIfNeeded();
   }
 
   @override
@@ -197,6 +213,16 @@ class _CNSearchBarState extends State<CNSearchBar> {
       'placeholder': widget.placeholder,
       'enabled': widget.enabled,
       'showsCancelButton': widget.showsCancelButton,
+      if (widget.trailingIcon != null)
+        'trailingIconDataCodePoint': widget.trailingIcon!.codePoint,
+      if (widget.trailingIcon != null)
+        'trailingIconDataFontFamily': widget.trailingIcon!.fontFamily,
+      if (widget.trailingIcon != null)
+        'trailingIconDataFontPackage': widget.trailingIcon!.fontPackage,
+      if (widget.trailingIcon != null)
+        'trailingIconDataMatchTextDirection':
+            widget.trailingIcon!.matchTextDirection,
+      'trailingIconEnabled': widget.onTrailingPressed != null,
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
         ..addAll({
@@ -260,6 +286,9 @@ class _CNSearchBarState extends State<CNSearchBar> {
       case 'cancelled':
         widget.onCancelled?.call();
         break;
+      case 'trailingPressed':
+        widget.onTrailingPressed?.call();
+        break;
     }
     return null;
   }
@@ -283,6 +312,12 @@ class _CNSearchBarState extends State<CNSearchBar> {
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
     _lastFieldBackground =
         resolveColorToArgb(widget.fieldBackgroundColor, context);
+    _lastTrailingIconName = widget.trailingIcon?.codePoint.toString();
+    _lastTrailingIconFontFamily = widget.trailingIcon?.fontFamily;
+    _lastTrailingIconFontPackage = widget.trailingIcon?.fontPackage;
+    _lastTrailingIconMatchTextDirection =
+        widget.trailingIcon?.matchTextDirection;
+    _lastTrailingIconEnabled = widget.onTrailingPressed != null;
   }
 
   Future<void> _syncPropsToNativeIfNeeded() async {
@@ -296,6 +331,12 @@ class _CNSearchBarState extends State<CNSearchBar> {
     final tint = resolveColorToArgb(_effectiveTint, context);
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
+    final trailingIconCodePoint = widget.trailingIcon?.codePoint;
+    final trailingIconFontFamily = widget.trailingIcon?.fontFamily;
+    final trailingIconFontPackage = widget.trailingIcon?.fontPackage;
+    final trailingIconMatchTextDirection =
+        widget.trailingIcon?.matchTextDirection ?? false;
+    final trailingIconEnabled = widget.onTrailingPressed != null;
 
     if (_lastText != text) {
       await channel.invokeMethod('setText', {'text': text});
@@ -318,6 +359,27 @@ class _CNSearchBarState extends State<CNSearchBar> {
         'showsCancelButton': showsCancelButton,
       });
       _lastShowsCancelButton = showsCancelButton;
+    }
+
+    final trailingChanged = _lastTrailingIconName !=
+            trailingIconCodePoint?.toString() ||
+        _lastTrailingIconFontFamily != trailingIconFontFamily ||
+        _lastTrailingIconFontPackage != trailingIconFontPackage ||
+        _lastTrailingIconMatchTextDirection != trailingIconMatchTextDirection ||
+        _lastTrailingIconEnabled != trailingIconEnabled;
+    if (trailingChanged) {
+      await channel.invokeMethod('setTrailingButton', {
+        'trailingIconDataCodePoint': trailingIconCodePoint,
+        'trailingIconDataFontFamily': trailingIconFontFamily,
+        'trailingIconDataFontPackage': trailingIconFontPackage,
+        'trailingIconDataMatchTextDirection': trailingIconMatchTextDirection,
+        'trailingIconEnabled': trailingIconEnabled,
+      });
+      _lastTrailingIconName = trailingIconCodePoint?.toString();
+      _lastTrailingIconFontFamily = trailingIconFontFamily;
+      _lastTrailingIconFontPackage = trailingIconFontPackage;
+      _lastTrailingIconMatchTextDirection = trailingIconMatchTextDirection;
+      _lastTrailingIconEnabled = trailingIconEnabled;
     }
 
     final style = <String, dynamic>{};
