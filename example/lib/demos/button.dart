@@ -55,7 +55,7 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                 CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.filled, onPressed: () => _set('Icon Filled')),
                 CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.glass, onPressed: () => _set('Icon Glass')),
                 CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.prominentGlass, onPressed: () => _set('Icon ProminentGlass')),
-                CNButton.icon(iconData: Icons.favorite_outline, style: CNButtonStyle.prominentGlass, onPressed: () => _set('IconData Favorite')),
+                CNButton.icon(iconData: Icons.favorite_outline, iconDataSize: 22, style: CNButtonStyle.prominentGlass, onPressed: () => _set('IconData Favorite')),
               ],
             ),
             const SizedBox(height: 48),
