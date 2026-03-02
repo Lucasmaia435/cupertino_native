@@ -1,7 +1,16 @@
 import Flutter
 import UIKit
+import CoreText
 
 class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBarDelegate {
+  private struct FlutterFontManifestEntry {
+    let family: String
+    let assets: [String]
+  }
+
+  private static var cachedFlutterAssetsURL: URL?
+  private static var cachedFontManifest: [FlutterFontManifestEntry]?
+
   private let channel: FlutterMethodChannel
   private let container: UIView
   private let searchBar: UISearchBar
@@ -19,6 +28,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     var tint: UIColor? = nil
     var bg: UIColor? = nil
     var fieldBg: UIColor? = nil
+    var trailingIconDataCodePoint: Int? = nil
+    var trailingIconDataFontFamily: String? = nil
+    var trailingIconDataFontPackage: String? = nil
+    var trailingIconDataMatchTextDirection: Bool = false
+    var trailingIconEnabled: Bool = false
 
     if let dict = args as? [String: Any] {
       if let value = dict["text"] as? String { text = value }
@@ -31,6 +45,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
         if let value = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(value.intValue) }
         if let value = style["fieldBackgroundColor"] as? NSNumber { fieldBg = Self.colorFromARGB(value.intValue) }
       }
+      if let value = dict["trailingIconDataCodePoint"] as? NSNumber { trailingIconDataCodePoint = value.intValue }
+      if let value = dict["trailingIconDataFontFamily"] as? String { trailingIconDataFontFamily = value }
+      if let value = dict["trailingIconDataFontPackage"] as? String { trailingIconDataFontPackage = value }
+      if let value = dict["trailingIconDataMatchTextDirection"] as? NSNumber {
+        trailingIconDataMatchTextDirection = value.boolValue
+      }
+      if let value = dict["trailingIconEnabled"] as? NSNumber { trailingIconEnabled = value.boolValue }
     }
 
     super.init()
@@ -50,6 +71,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     if let color = tint { searchBar.tintColor = color }
     if let color = bg { searchBar.backgroundColor = color }
     if let color = fieldBg { searchBar.searchTextField.backgroundColor = color }
+    applyTrailingButton(
+      iconDataCodePoint: trailingIconDataCodePoint,
+      iconDataFontFamily: trailingIconDataFontFamily,
+      iconDataFontPackage: trailingIconDataFontPackage,
+      iconDataMatchTextDirection: trailingIconDataMatchTextDirection,
+      enabled: trailingIconEnabled
+    )
 
     container.addSubview(searchBar)
     NSLayoutConstraint.activate([
@@ -90,6 +118,45 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
           self.searchBar.setShowsCancelButton(value, animated: true)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing showsCancelButton", details: nil)) }
+      case "setTrailingButton":
+        if let params = call.arguments as? [String: Any] {
+          var iconDataCodePoint: Int? = nil
+          var iconDataFontFamily: String? = nil
+          var iconDataFontPackage: String? = nil
+          var iconDataMatchTextDirection: Bool = false
+          var iconEnabled: Bool = false
+
+          if params["trailingIconDataCodePoint"] is NSNull {
+            iconDataCodePoint = nil
+          } else {
+            iconDataCodePoint = (params["trailingIconDataCodePoint"] as? NSNumber)?.intValue
+          }
+          if params["trailingIconDataFontFamily"] is NSNull {
+            iconDataFontFamily = nil
+          } else {
+            iconDataFontFamily = params["trailingIconDataFontFamily"] as? String
+          }
+          if params["trailingIconDataFontPackage"] is NSNull {
+            iconDataFontPackage = nil
+          } else {
+            iconDataFontPackage = params["trailingIconDataFontPackage"] as? String
+          }
+          if let value = params["trailingIconDataMatchTextDirection"] as? NSNumber {
+            iconDataMatchTextDirection = value.boolValue
+          }
+          if let value = params["trailingIconEnabled"] as? NSNumber {
+            iconEnabled = value.boolValue
+          }
+
+          self.applyTrailingButton(
+            iconDataCodePoint: iconDataCodePoint,
+            iconDataFontFamily: iconDataFontFamily,
+            iconDataFontPackage: iconDataFontPackage,
+            iconDataMatchTextDirection: iconDataMatchTextDirection,
+            enabled: iconEnabled
+          )
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing trailing button args", details: nil)) }
       case "setStyle":
         if let params = call.arguments as? [String: Any] {
           if let value = params["tint"] as? NSNumber {
@@ -142,10 +209,217 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     searchBar.resignFirstResponder()
   }
 
+  func searchBarBookmarkButtonClicked(_ searchBar: UISearchBar) {
+    channel.invokeMethod("trailingPressed", arguments: nil)
+  }
+
   private func applyEnabled(_ enabled: Bool) {
     searchBar.isUserInteractionEnabled = enabled
     searchBar.searchTextField.isEnabled = enabled
     searchBar.alpha = enabled ? 1.0 : 0.6
+  }
+
+  private func applyTrailingButton(
+    iconDataCodePoint: Int?,
+    iconDataFontFamily: String?,
+    iconDataFontPackage: String?,
+    iconDataMatchTextDirection: Bool,
+    enabled: Bool
+  ) {
+    guard let codePoint = iconDataCodePoint,
+          var image = Self.iconImage(
+            codePoint: codePoint,
+            fontFamily: iconDataFontFamily,
+            fontPackage: iconDataFontPackage,
+            pointSize: 16
+          ) else {
+      searchBar.showsBookmarkButton = false
+      searchBar.setImage(nil, for: .bookmark, state: .normal)
+      searchBar.setImage(nil, for: .bookmark, state: .highlighted)
+      return
+    }
+
+    if iconDataMatchTextDirection {
+      image = image.imageFlippedForRightToLeftLayoutDirection()
+    }
+    searchBar.setImage(image, for: .bookmark, state: .normal)
+    searchBar.setImage(image, for: .bookmark, state: .highlighted)
+    searchBar.showsBookmarkButton = enabled
+  }
+
+  private static func iconImage(
+    codePoint: Int,
+    fontFamily: String?,
+    fontPackage: String?,
+    pointSize: CGFloat
+  ) -> UIImage? {
+    guard let scalar = UnicodeScalar(codePoint) else { return nil }
+    let glyph = String(scalar) as NSString
+    let resolvedFont = loadIconFont(
+      family: fontFamily,
+      package: fontPackage,
+      pointSize: pointSize
+    ) ?? UIFont.systemFont(ofSize: pointSize)
+    let canvasSize = CGSize(width: pointSize * 1.8, height: pointSize * 1.8)
+    let renderer = UIGraphicsImageRenderer(size: canvasSize)
+    let image = renderer.image { _ in
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.alignment = .center
+      let attrs: [NSAttributedString.Key: Any] = [
+        .font: resolvedFont,
+        .foregroundColor: UIColor.white,
+        .paragraphStyle: paragraph
+      ]
+      let glyphSize = glyph.size(withAttributes: attrs)
+      let rect = CGRect(
+        x: (canvasSize.width - glyphSize.width) / 2.0,
+        y: (canvasSize.height - glyphSize.height) / 2.0,
+        width: glyphSize.width,
+        height: glyphSize.height
+      )
+      glyph.draw(in: rect, withAttributes: attrs)
+    }
+    return image.withRenderingMode(.alwaysTemplate)
+  }
+
+  private static func loadIconFont(
+    family: String?,
+    package: String?,
+    pointSize: CGFloat
+  ) -> UIFont? {
+    guard let family else { return nil }
+    ensureFlutterFontRegistered(family: family, package: package)
+
+    let directCandidates = directFontNameCandidates(
+      family: family,
+      package: package
+    )
+    for candidate in directCandidates {
+      if let font = UIFont(name: candidate, size: pointSize) {
+        return font
+      }
+    }
+
+    let wanted = normalizedFontToken(family)
+    for familyName in UIFont.familyNames {
+      let familyToken = normalizedFontToken(familyName)
+      if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
+        if let font = UIFont(name: familyName, size: pointSize) {
+          return font
+        }
+      }
+      for fontName in UIFont.fontNames(forFamilyName: familyName) {
+        let fontToken = normalizedFontToken(fontName)
+        if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
+          if let font = UIFont(name: fontName, size: pointSize) {
+            return font
+          }
+        }
+      }
+    }
+    return nil
+  }
+
+  private static func directFontNameCandidates(family: String, package: String?) -> [String] {
+    var candidates: [String] = []
+    if let package {
+      candidates.append("packages/\(package)/\(family)")
+      candidates.append("\(package)/\(family)")
+    }
+    candidates.append(family)
+    candidates.append("\(family)-Regular")
+    candidates.append(family.replacingOccurrences(of: "_", with: " "))
+    candidates.append(family.replacingOccurrences(of: "_", with: "") + "-Regular")
+    if family == "MaterialIcons" {
+      candidates.append("Material Icons")
+      candidates.append("MaterialIcons-Regular")
+    }
+    if family == "CupertinoIcons" {
+      candidates.append("Cupertino Icons")
+    }
+    return Array(Set(candidates))
+  }
+
+  private static func normalizedFontToken(_ text: String) -> String {
+    let allowed = CharacterSet.alphanumerics
+    return text.lowercased().unicodeScalars
+      .filter { allowed.contains($0) }
+      .map(String.init)
+      .joined()
+  }
+
+  private static func ensureFlutterFontRegistered(family: String, package: String?) {
+    let manifest = loadFontManifest()
+    guard !manifest.isEmpty else { return }
+    let candidates = [
+      family,
+      package != nil ? "packages/\(package!)/\(family)" : nil
+    ].compactMap { $0 }
+
+    for candidate in candidates {
+      let entries = manifest.filter { $0.family == candidate }
+      for entry in entries {
+        registerFontAssets(entry.assets)
+      }
+    }
+  }
+
+  private static func registerFontAssets(_ assets: [String]) {
+    guard let assetsRoot = flutterAssetsURL() else { return }
+    for asset in assets {
+      let fileURL = assetsRoot.appendingPathComponent(asset)
+      guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+      CTFontManagerRegisterFontsForURL(fileURL as CFURL, .process, nil)
+    }
+  }
+
+  private static func loadFontManifest() -> [FlutterFontManifestEntry] {
+    if let cachedFontManifest {
+      return cachedFontManifest
+    }
+    guard let assetsRoot = flutterAssetsURL() else {
+      cachedFontManifest = []
+      return []
+    }
+    let manifestURL = assetsRoot.appendingPathComponent("FontManifest.json")
+    guard let data = try? Data(contentsOf: manifestURL),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+      cachedFontManifest = []
+      return []
+    }
+
+    let parsed = json.compactMap { item -> FlutterFontManifestEntry? in
+      guard let family = item["family"] as? String else { return nil }
+      let fonts = (item["fonts"] as? [[String: Any]]) ?? []
+      let assets = fonts.compactMap { $0["asset"] as? String }
+      return FlutterFontManifestEntry(family: family, assets: assets)
+    }
+    cachedFontManifest = parsed
+    return parsed
+  }
+
+  private static func flutterAssetsURL() -> URL? {
+    if let cachedFlutterAssetsURL {
+      return cachedFlutterAssetsURL
+    }
+    let candidates: [URL?] = [
+      Bundle.main.resourceURL?.appendingPathComponent("flutter_assets"),
+      Bundle.main.privateFrameworksURL?
+        .appendingPathComponent("App.framework")
+        .appendingPathComponent("flutter_assets"),
+      URL(fileURLWithPath: Bundle.main.bundlePath)
+        .appendingPathComponent("Frameworks")
+        .appendingPathComponent("App.framework")
+        .appendingPathComponent("flutter_assets")
+    ]
+    for candidate in candidates.compactMap({ $0 }) {
+      var isDir: ObjCBool = false
+      if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDir), isDir.boolValue {
+        cachedFlutterAssetsURL = candidate
+        return candidate
+      }
+    }
+    return nil
   }
 
   private static func colorFromARGB(_ argb: Int) -> UIColor {
