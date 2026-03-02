@@ -1,5 +1,6 @@
 import 'package:cupertino_native/cupertino_native.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Icons;
 
 class ButtonDemoPage extends StatefulWidget {
   const ButtonDemoPage({super.key});
@@ -27,60 +28,15 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                CNButton(
-                  label: 'Plain',
-                  style: CNButtonStyle.plain,
-                  onPressed: () => _set('Plain'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'Gray',
-                  style: CNButtonStyle.gray,
-                  onPressed: () => _set('Gray'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'Tinted',
-                  style: CNButtonStyle.tinted,
-                  onPressed: () => _set('Tinted'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'Bordered',
-                  style: CNButtonStyle.bordered,
-                  onPressed: () => _set('Bordered'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'BorderedProminent',
-                  style: CNButtonStyle.borderedProminent,
-                  onPressed: () => _set('BorderedProminent'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'Filled',
-                  style: CNButtonStyle.filled,
-                  onPressed: () => _set('Filled'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'Glass',
-                  style: CNButtonStyle.glass,
-                  onPressed: () => _set('Glass'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'ProminentGlass',
-                  style: CNButtonStyle.prominentGlass,
-                  onPressed: () => _set('ProminentGlass'),
-                  shrinkWrap: true,
-                ),
-                CNButton(
-                  label: 'Disabled',
-                  style: CNButtonStyle.bordered,
-                  onPressed: null,
-                  shrinkWrap: true,
-                ),
+                CNButton(label: 'Plain', style: CNButtonStyle.plain, onPressed: () => _set('Plain'), shrinkWrap: true),
+                CNButton(label: 'Gray', style: CNButtonStyle.gray, onPressed: () => _set('Gray'), shrinkWrap: true),
+                CNButton(label: 'Tinted', style: CNButtonStyle.tinted, onPressed: () => _set('Tinted'), shrinkWrap: true),
+                CNButton(label: 'Bordered', style: CNButtonStyle.bordered, onPressed: () => _set('Bordered'), shrinkWrap: true),
+                CNButton(label: 'BorderedProminent', style: CNButtonStyle.borderedProminent, onPressed: () => _set('BorderedProminent'), shrinkWrap: true),
+                CNButton(label: 'Filled', style: CNButtonStyle.filled, onPressed: () => _set('Filled'), shrinkWrap: true),
+                CNButton(label: 'Glass', style: CNButtonStyle.glass, onPressed: () => _set('Glass'), shrinkWrap: true),
+                CNButton(label: 'ProminentGlass', style: CNButtonStyle.prominentGlass, onPressed: () => _set('ProminentGlass'), shrinkWrap: true),
+                CNButton(label: 'Disabled', style: CNButtonStyle.bordered, onPressed: null, shrinkWrap: true),
               ],
             ),
             const SizedBox(height: 48),
@@ -91,46 +47,15 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
               runSpacing: 12,
               alignment: WrapAlignment.center,
               children: [
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.plain,
-                  onPressed: () => _set('Icon Plain'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.gray,
-                  onPressed: () => _set('Icon Gray'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.tinted,
-                  onPressed: () => _set('Icon Tinted'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.bordered,
-                  onPressed: () => _set('Icon Bordered'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.borderedProminent,
-                  onPressed: () => _set('Icon BorderedProminent'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.filled,
-                  onPressed: () => _set('Icon Filled'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.glass,
-                  onPressed: () => _set('Icon Glass'),
-                ),
-                CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
-                  style: CNButtonStyle.prominentGlass,
-                  onPressed: () => _set('Icon ProminentGlass'),
-                ),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.plain, onPressed: () => _set('Icon Plain')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.gray, onPressed: () => _set('Icon Gray')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.tinted, onPressed: () => _set('Icon Tinted')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.bordered, onPressed: () => _set('Icon Bordered')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.borderedProminent, onPressed: () => _set('Icon BorderedProminent')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.filled, onPressed: () => _set('Icon Filled')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.glass, onPressed: () => _set('Icon Glass')),
+                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.prominentGlass, onPressed: () => _set('Icon ProminentGlass')),
+                CNButton.icon(iconData: Icons.favorite_outline, style: CNButtonStyle.prominentGlass, onPressed: () => _set('IconData Favorite')),
               ],
             ),
             const SizedBox(height: 48),
