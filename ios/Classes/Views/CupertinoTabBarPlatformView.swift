@@ -29,7 +29,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentIconFontFamilies: [String?] = []
   private var currentIconFontPackages: [String?] = []
   private var currentIconMatchDirections: [Bool] = []
-  private var currentSizes: [NSNumber] = []
+  private var currentSizes: [CGFloat?] = []
   private var currentTintColor: UIColor? = nil
   private var currentBackgroundColor: UIColor? = nil
 
@@ -50,7 +50,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       currentIconFontFamilies = Self.parseOptionalStringArray(dict["iconDataFontFamilies"])
       currentIconFontPackages = Self.parseOptionalStringArray(dict["iconDataFontPackages"])
       currentIconMatchDirections = Self.parseBoolArray(dict["iconDataMatchTextDirections"])
-      currentSizes = (dict["sfSymbolSizes"] as? [NSNumber]) ?? []
+      currentSizes = Self.parseOptionalDoubleArray(dict["sfSymbolSizes"])
       if let value = dict["selectedIndex"] as? NSNumber { selectedIndex = value.intValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let style = dict["style"] as? [String: Any] {
@@ -100,6 +100,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           self.currentIconFontFamilies = Self.parseOptionalStringArray(params["iconDataFontFamilies"])
           self.currentIconFontPackages = Self.parseOptionalStringArray(params["iconDataFontPackages"])
           self.currentIconMatchDirections = Self.parseBoolArray(params["iconDataMatchTextDirections"])
+          self.currentSizes = Self.parseOptionalDoubleArray(params["sfSymbolSizes"])
           let selectedIndex = (params["selectedIndex"] as? NSNumber)?.intValue ?? 0
           self.rebuildBars(selectedIndex: selectedIndex)
           result(nil)
@@ -305,7 +306,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private func imageForItem(_ index: Int) -> UIImage? {
     if index < currentSymbols.count {
       let symbolName = currentSymbols[index]
-      if !symbolName.isEmpty, let image = UIImage(systemName: symbolName) {
+      if !symbolName.isEmpty, var image = UIImage(systemName: symbolName) {
+        if index < currentSizes.count, let size = currentSizes[index] {
+          image = image.applyingSymbolConfiguration(
+            UIImage.SymbolConfiguration(pointSize: size)
+          ) ?? image
+        }
         return image
       }
     }
@@ -318,7 +324,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     let family = index < currentIconFontFamilies.count ? currentIconFontFamilies[index] : nil
     let package = index < currentIconFontPackages.count ? currentIconFontPackages[index] : nil
     let pointSize: CGFloat = index < currentSizes.count
-      ? CGFloat(truncating: currentSizes[index])
+      ? (currentSizes[index] ?? 20)
       : 20
     guard var image = Self.iconImage(
       codePoint: codePoint,
@@ -536,6 +542,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     return raw.map { element in
       if let number = element as? NSNumber { return number.boolValue }
       return false
+    }
+  }
+
+  private static func parseOptionalDoubleArray(_ value: Any?) -> [CGFloat?] {
+    guard let raw = value as? [Any] else { return [] }
+    return raw.map { element in
+      if element is NSNull { return nil }
+      if let number = element as? NSNumber {
+        return CGFloat(truncating: number)
+      }
+      return nil
     }
   }
 
