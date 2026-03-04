@@ -23,8 +23,7 @@ class CNButton extends StatefulWidget {
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
   })  : icon = null,
-        iconData = null,
-        iconDataSize = null,
+        flutterIcon = null,
         width = null,
         round = false;
 
@@ -32,24 +31,19 @@ class CNButton extends StatefulWidget {
   const CNButton.icon({
     super.key,
     this.icon,
-    this.iconData,
-    this.iconDataSize,
+    this.flutterIcon,
     this.onPressed,
     this.enabled = true,
     this.tint,
     double size = 44.0,
     this.style = CNButtonStyle.glass,
   })  : assert(
-          icon == null || iconData == null,
-          'Use either icon (CNSymbol) or iconData (IconData), not both.',
+          icon == null || flutterIcon == null,
+          'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
         ),
         assert(
-          icon != null || iconData != null,
-          'Provide icon (CNSymbol) or iconData (IconData).',
-        ),
-        assert(
-          icon == null || iconDataSize == null,
-          'iconDataSize can only be used with iconData.',
+          icon != null || flutterIcon != null,
+          'Provide icon (CNSymbol) or flutterIcon (Icon).',
         ),
         label = null,
         round = true,
@@ -63,11 +57,10 @@ class CNButton extends StatefulWidget {
   /// Button icon using SF Symbols.
   final CNSymbol? icon;
 
-  /// Button icon using Flutter [IconData].
-  final IconData? iconData;
-
-  /// Icon size used when [iconData] is provided.
-  final double? iconDataSize;
+  /// Button icon using Flutter [Icon].
+  ///
+  /// This allows variable-font properties like fill/weight.
+  final Icon? flutterIcon;
 
   /// Callback when pressed.
   final VoidCallback? onPressed;
@@ -93,7 +86,7 @@ class CNButton extends StatefulWidget {
   final bool round;
 
   /// Whether this instance is configured as the icon variant.
-  bool get isIcon => icon != null || iconData != null;
+  bool get isIcon => icon != null || flutterIcon != null;
 
   @override
   State<CNButton> createState() => _CNButtonState();
@@ -111,13 +104,25 @@ class _CNButtonState extends State<CNButton> {
   bool? _lastIconMatchTextDirection;
   double? _lastIconSize;
   int? _lastIconColor;
+  double? _lastIconFill;
+  double? _lastIconWeight;
+  double? _lastIconGrade;
+  double? _lastIconOpticalSize;
   double? _intrinsicWidth;
   CNButtonStyle? _lastStyle;
   Offset? _downPosition;
   bool _pressed = false;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
-  double? get _effectiveIconSize => widget.icon?.size ?? widget.iconDataSize;
+  IconData? get _flutterIconData => widget.flutterIcon?.icon;
+  double? get _effectiveIconSize =>
+      widget.icon?.size ?? widget.flutterIcon?.size;
+  int? get _effectiveIconColor => resolveColorToArgb(
+      widget.icon?.color ?? widget.flutterIcon?.color, context);
+  double? get _effectiveIconFill => widget.flutterIcon?.fill;
+  double? get _effectiveIconWeight => widget.flutterIcon?.weight;
+  double? get _effectiveIconGrade => widget.flutterIcon?.grade;
+  double? get _effectiveIconOpticalSize => widget.flutterIcon?.opticalSize;
 
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
@@ -158,10 +163,21 @@ class _CNButtonState extends State<CNButton> {
               ? widget.onPressed
               : null,
           child: widget.isIcon
-              ? Icon(
-                  widget.iconData ?? CupertinoIcons.ellipsis,
-                  size: _effectiveIconSize,
-                )
+              ? (widget.flutterIcon != null
+                  ? Icon(
+                      widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
+                      size: _effectiveIconSize,
+                      color: widget.flutterIcon!.color,
+                      fill: widget.flutterIcon!.fill,
+                      weight: widget.flutterIcon!.weight,
+                      grade: widget.flutterIcon!.grade,
+                      opticalSize: widget.flutterIcon!.opticalSize,
+                      shadows: widget.flutterIcon!.shadows,
+                    )
+                  : Icon(
+                      CupertinoIcons.ellipsis,
+                      size: _effectiveIconSize,
+                    ))
               : Text(widget.label ?? ''),
         ),
       );
@@ -173,8 +189,7 @@ class _CNButtonState extends State<CNButton> {
       if (widget.label != null) 'buttonTitle': widget.label,
       if (widget.icon != null) 'buttonIconName': widget.icon!.name,
       if (_effectiveIconSize != null) 'buttonIconSize': _effectiveIconSize,
-      if (widget.icon?.color != null)
-        'buttonIconColor': resolveColorToArgb(widget.icon!.color, context),
+      if (_effectiveIconColor != null) 'buttonIconColor': _effectiveIconColor,
       if (widget.icon?.mode != null)
         'buttonIconRenderingMode': widget.icon!.mode!.name,
       if (widget.icon?.paletteColors != null)
@@ -183,14 +198,22 @@ class _CNButtonState extends State<CNButton> {
             .toList(),
       if (widget.icon?.gradient != null)
         'buttonIconGradientEnabled': widget.icon!.gradient,
-      if (widget.iconData != null)
-        'buttonIconDataCodePoint': widget.iconData!.codePoint,
-      if (widget.iconData != null)
-        'buttonIconDataFontFamily': widget.iconData!.fontFamily,
-      if (widget.iconData != null)
-        'buttonIconDataFontPackage': widget.iconData!.fontPackage,
-      if (widget.iconData != null)
-        'buttonIconDataMatchTextDirection': widget.iconData!.matchTextDirection,
+      if (_flutterIconData != null)
+        'buttonIconDataCodePoint': _flutterIconData!.codePoint,
+      if (_flutterIconData != null)
+        'buttonIconDataFontFamily': _flutterIconData!.fontFamily,
+      if (_flutterIconData != null)
+        'buttonIconDataFontPackage': _flutterIconData!.fontPackage,
+      if (_flutterIconData != null)
+        'buttonIconDataMatchTextDirection':
+            _flutterIconData!.matchTextDirection,
+      if (_effectiveIconFill != null) 'buttonIconDataFill': _effectiveIconFill,
+      if (_effectiveIconWeight != null)
+        'buttonIconDataWeight': _effectiveIconWeight,
+      if (_effectiveIconGrade != null)
+        'buttonIconDataGrade': _effectiveIconGrade,
+      if (_effectiveIconOpticalSize != null)
+        'buttonIconDataOpticalSize': _effectiveIconOpticalSize,
       if (widget.isIcon) 'round': true,
       'buttonStyle': widget.style.name,
       'enabled': (widget.enabled && widget.onPressed != null),
@@ -269,12 +292,16 @@ class _CNButtonState extends State<CNButton> {
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
-    _lastIconCodePoint = widget.iconData?.codePoint;
-    _lastIconFontFamily = widget.iconData?.fontFamily;
-    _lastIconFontPackage = widget.iconData?.fontPackage;
-    _lastIconMatchTextDirection = widget.iconData?.matchTextDirection;
+    _lastIconCodePoint = _flutterIconData?.codePoint;
+    _lastIconFontFamily = _flutterIconData?.fontFamily;
+    _lastIconFontPackage = _flutterIconData?.fontPackage;
+    _lastIconMatchTextDirection = _flutterIconData?.matchTextDirection;
     _lastIconSize = _effectiveIconSize;
-    _lastIconColor = resolveColorToArgb(widget.icon?.color, context);
+    _lastIconColor = _effectiveIconColor;
+    _lastIconFill = _effectiveIconFill;
+    _lastIconWeight = _effectiveIconWeight;
+    _lastIconGrade = _effectiveIconGrade;
+    _lastIconOpticalSize = _effectiveIconOpticalSize;
     _lastStyle = widget.style;
     if (!widget.isIcon) {
       _requestIntrinsicSize();
@@ -309,12 +336,16 @@ class _CNButtonState extends State<CNButton> {
     if (ch == null) return;
     final tint = resolveColorToArgb(_effectiveTint, context);
     final preIconName = widget.icon?.name;
-    final preIconCodePoint = widget.iconData?.codePoint;
-    final preIconFontFamily = widget.iconData?.fontFamily;
-    final preIconFontPackage = widget.iconData?.fontPackage;
-    final preIconMatchTextDirection = widget.iconData?.matchTextDirection;
+    final preIconCodePoint = _flutterIconData?.codePoint;
+    final preIconFontFamily = _flutterIconData?.fontFamily;
+    final preIconFontPackage = _flutterIconData?.fontPackage;
+    final preIconMatchTextDirection = _flutterIconData?.matchTextDirection;
     final preIconSize = _effectiveIconSize;
-    final preIconColor = resolveColorToArgb(widget.icon?.color, context);
+    final preIconColor = _effectiveIconColor;
+    final preIconFill = _effectiveIconFill;
+    final preIconWeight = _effectiveIconWeight;
+    final preIconGrade = _effectiveIconGrade;
+    final preIconOpticalSize = _effectiveIconOpticalSize;
 
     if (_lastTint != tint && tint != null) {
       await ch.invokeMethod('setStyle', {'tint': tint});
@@ -361,16 +392,29 @@ class _CNButtonState extends State<CNButton> {
           _lastIconFontPackage != preIconFontPackage ||
           _lastIconMatchTextDirection != preIconMatchTextDirection ||
           _lastIconName != null;
-      if (iconDataChanged && preIconCodePoint != null) {
+      final iconDataStyleChanged = _lastIconFill != preIconFill ||
+          _lastIconWeight != preIconWeight ||
+          _lastIconGrade != preIconGrade ||
+          _lastIconOpticalSize != preIconOpticalSize;
+      if ((iconDataChanged || iconDataStyleChanged) &&
+          preIconCodePoint != null) {
         updates['buttonIconDataCodePoint'] = preIconCodePoint;
         updates['buttonIconDataFontFamily'] = preIconFontFamily;
         updates['buttonIconDataFontPackage'] = preIconFontPackage;
         updates['buttonIconDataMatchTextDirection'] =
             preIconMatchTextDirection ?? false;
+        updates['buttonIconDataFill'] = preIconFill;
+        updates['buttonIconDataWeight'] = preIconWeight;
+        updates['buttonIconDataGrade'] = preIconGrade;
+        updates['buttonIconDataOpticalSize'] = preIconOpticalSize;
         _lastIconCodePoint = preIconCodePoint;
         _lastIconFontFamily = preIconFontFamily;
         _lastIconFontPackage = preIconFontPackage;
         _lastIconMatchTextDirection = preIconMatchTextDirection;
+        _lastIconFill = preIconFill;
+        _lastIconWeight = preIconWeight;
+        _lastIconGrade = preIconGrade;
+        _lastIconOpticalSize = preIconOpticalSize;
         _lastIconName = null;
       }
       if (widget.icon?.mode != null) {

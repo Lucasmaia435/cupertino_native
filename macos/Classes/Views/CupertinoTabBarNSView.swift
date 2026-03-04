@@ -20,6 +20,10 @@ class CupertinoTabBarNSView: NSView {
   private var currentIconFontFamilies: [String?] = []
   private var currentIconFontPackages: [String?] = []
   private var currentIconMatchDirections: [Bool] = []
+  private var currentIconFills: [CGFloat?] = []
+  private var currentIconWeights: [CGFloat?] = []
+  private var currentIconGrades: [CGFloat?] = []
+  private var currentIconOpticalSizes: [CGFloat?] = []
   private var currentSizes: [CGFloat?] = []
   private var currentSelectedIndex: Int = 0
   private var currentTint: NSColor? = nil
@@ -41,6 +45,10 @@ class CupertinoTabBarNSView: NSView {
       currentIconFontFamilies = Self.parseOptionalStringArray(dict["iconDataFontFamilies"])
       currentIconFontPackages = Self.parseOptionalStringArray(dict["iconDataFontPackages"])
       currentIconMatchDirections = Self.parseBoolArray(dict["iconDataMatchTextDirections"])
+      currentIconFills = Self.parseOptionalDoubleArray(dict["iconDataFills"])
+      currentIconWeights = Self.parseOptionalDoubleArray(dict["iconDataWeights"])
+      currentIconGrades = Self.parseOptionalDoubleArray(dict["iconDataGrades"])
+      currentIconOpticalSizes = Self.parseOptionalDoubleArray(dict["iconDataOpticalSizes"])
       currentSizes = Self.parseOptionalDoubleArray(dict["sfSymbolSizes"])
       if let value = dict["selectedIndex"] as? NSNumber { currentSelectedIndex = value.intValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
@@ -105,12 +113,24 @@ class CupertinoTabBarNSView: NSView {
           self.currentIconFontFamilies = Self.parseOptionalStringArray(params["iconDataFontFamilies"])
           self.currentIconFontPackages = Self.parseOptionalStringArray(params["iconDataFontPackages"])
           self.currentIconMatchDirections = Self.parseBoolArray(params["iconDataMatchTextDirections"])
+          self.currentIconFills = Self.parseOptionalDoubleArray(params["iconDataFills"])
+          self.currentIconWeights = Self.parseOptionalDoubleArray(params["iconDataWeights"])
+          self.currentIconGrades = Self.parseOptionalDoubleArray(params["iconDataGrades"])
+          self.currentIconOpticalSizes = Self.parseOptionalDoubleArray(params["iconDataOpticalSizes"])
           self.currentSizes = Self.parseOptionalDoubleArray(params["sfSymbolSizes"])
           self.currentSelectedIndex = (params["selectedIndex"] as? NSNumber)?.intValue ?? self.currentSelectedIndex
           self.configureSegments()
           result(nil)
         } else {
           result(FlutterError(code: "bad_args", message: "Missing items", details: nil))
+        }
+      case "setItemIconStyle":
+        if let params = call.arguments as? [String: Any],
+           let index = (params["index"] as? NSNumber)?.intValue {
+          self.updateItemIconStyle(at: index, params: params)
+          result(nil)
+        } else {
+          result(FlutterError(code: "bad_args", message: "Missing icon style args", details: nil))
         }
       case "setLayout":
         // macOS uses a single segmented control layout.
@@ -156,16 +176,11 @@ class CupertinoTabBarNSView: NSView {
       control.selectedSegment = -1
     }
     for index in 0..<count {
-      if let image = baseImageForSegment(index) {
-        control.setImage(image, forSegment: index)
-        control.setLabel("", forSegment: index)
-      } else if index < currentLabels.count {
-        control.setImage(nil, forSegment: index)
-        control.setLabel(currentLabels[index], forSegment: index)
-      } else {
-        control.setImage(nil, forSegment: index)
-        control.setLabel("", forSegment: index)
-      }
+      control.setImage(nil, forSegment: index)
+      control.setLabel(
+        index < currentLabels.count ? currentLabels[index] : "",
+        forSegment: index
+      )
     }
     applySegmentTint()
   }
@@ -175,12 +190,85 @@ class CupertinoTabBarNSView: NSView {
     guard count > 0 else { return }
     let selected = control.selectedSegment
     for index in 0..<count {
-      guard var image = baseImageForSegment(index) else { continue }
-      if index == selected, let tint = currentTint {
-        image = image.tinted(with: tint)
+      if var image = baseImageForSegment(index) {
+        if index == selected, let tint = currentTint {
+          image = image.tinted(with: tint)
+        }
+        control.setImage(image, forSegment: index)
+        control.setLabel("", forSegment: index)
+        continue
       }
-      control.setImage(image, forSegment: index)
+      if let textImage = textImageForSegment(index, selected: index == selected) {
+        control.setImage(textImage, forSegment: index)
+        control.setLabel("", forSegment: index)
+        continue
+      }
+      control.setImage(nil, forSegment: index)
+      control.setLabel(
+        index < currentLabels.count ? currentLabels[index] : "",
+        forSegment: index
+      )
     }
+  }
+
+  private func textImageForSegment(_ index: Int, selected: Bool) -> NSImage? {
+    guard index < currentLabels.count else { return nil }
+    let text = currentLabels[index]
+    guard !text.isEmpty else { return nil }
+    let font = NSFont.systemFont(
+      ofSize: NSFont.systemFontSize,
+      weight: selected ? .semibold : .regular
+    )
+    let attrs: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: NSColor.labelColor
+    ]
+    let size = (text as NSString).size(withAttributes: attrs)
+    guard size.width > 0, size.height > 0 else { return nil }
+    let canvas = NSSize(width: ceil(size.width), height: ceil(size.height))
+    let image = NSImage(size: canvas)
+    image.lockFocus()
+    (text as NSString).draw(at: .zero, withAttributes: attrs)
+    image.unlockFocus()
+    image.isTemplate = false
+    return image
+  }
+
+  private func updateItemIconStyle(at index: Int, params: [String: Any]) {
+    guard index >= 0 else { return }
+    ensureStyleCapacity(index: index)
+
+    if params.keys.contains("sfSymbolSize") {
+      currentSizes[index] = Self.parseOptionalCGFloat(params["sfSymbolSize"])
+    }
+    if params.keys.contains("iconDataFill") {
+      currentIconFills[index] = Self.parseOptionalCGFloat(params["iconDataFill"])
+    }
+    if params.keys.contains("iconDataWeight") {
+      currentIconWeights[index] = Self.parseOptionalCGFloat(params["iconDataWeight"])
+    }
+    if params.keys.contains("iconDataGrade") {
+      currentIconGrades[index] = Self.parseOptionalCGFloat(params["iconDataGrade"])
+    }
+    if params.keys.contains("iconDataOpticalSize") {
+      currentIconOpticalSizes[index] = Self.parseOptionalCGFloat(params["iconDataOpticalSize"])
+    }
+
+    applySegmentTint()
+  }
+
+  private func ensureStyleCapacity(index: Int) {
+    let targetCount = index + 1
+    func expand<T>(_ array: inout [T?]) {
+      if array.count < targetCount {
+        array.append(contentsOf: Array(repeating: nil, count: targetCount - array.count))
+      }
+    }
+    expand(&currentSizes)
+    expand(&currentIconFills)
+    expand(&currentIconWeights)
+    expand(&currentIconGrades)
+    expand(&currentIconOpticalSizes)
   }
 
   private func baseImageForSegment(_ index: Int) -> NSImage? {
@@ -204,12 +292,22 @@ class CupertinoTabBarNSView: NSView {
     }
     let family = index < currentIconFontFamilies.count ? currentIconFontFamilies[index] : nil
     let package = index < currentIconFontPackages.count ? currentIconFontPackages[index] : nil
+    let fill = index < currentIconFills.count ? currentIconFills[index] : nil
+    let weight = index < currentIconWeights.count ? currentIconWeights[index] : nil
+    let grade = index < currentIconGrades.count ? currentIconGrades[index] : nil
+    let opticalSize = index < currentIconOpticalSizes.count
+      ? currentIconOpticalSizes[index]
+      : nil
     let size = index < currentSizes.count ? (currentSizes[index] ?? 18) : 18
     return Self.iconImage(
       codePoint: codePoint,
       fontFamily: family,
       fontPackage: package,
-      pointSize: size
+      pointSize: size,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     )
   }
 
@@ -226,14 +324,22 @@ class CupertinoTabBarNSView: NSView {
     codePoint: Int,
     fontFamily: String?,
     fontPackage: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> NSImage? {
     guard let scalar = UnicodeScalar(codePoint) else { return nil }
     let glyph = String(scalar) as NSString
     let resolvedFont = loadIconFont(
       family: fontFamily,
       package: fontPackage,
-      pointSize: pointSize
+      pointSize: pointSize,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) ?? NSFont.systemFont(ofSize: pointSize)
     let canvasSize = NSSize(width: pointSize * 1.8, height: pointSize * 1.8)
     let image = NSImage(size: canvasSize)
@@ -260,7 +366,11 @@ class CupertinoTabBarNSView: NSView {
   private static func loadIconFont(
     family: String?,
     package: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> NSFont? {
     guard let family else { return nil }
     ensureFlutterFontRegistered(family: family, package: package)
@@ -271,7 +381,13 @@ class CupertinoTabBarNSView: NSView {
     )
     for candidate in directCandidates {
       if let font = NSFont(name: candidate, size: pointSize) {
-        return font
+        return applyFontVariations(
+          to: font,
+          fill: fill,
+          weight: weight,
+          grade: grade,
+          opticalSize: opticalSize
+        )
       }
     }
 
@@ -280,7 +396,13 @@ class CupertinoTabBarNSView: NSView {
       let familyToken = normalizedFontToken(familyName)
       if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
         if let font = NSFont(name: familyName, size: pointSize) {
-          return font
+          return applyFontVariations(
+            to: font,
+            fill: fill,
+            weight: weight,
+            grade: grade,
+            opticalSize: opticalSize
+          )
         }
       }
       if let members = NSFontManager.shared.availableMembers(ofFontFamily: familyName) {
@@ -289,7 +411,13 @@ class CupertinoTabBarNSView: NSView {
             let fontToken = normalizedFontToken(fontName)
             if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
               if let font = NSFont(name: fontName, size: pointSize) {
-                return font
+                return applyFontVariations(
+                  to: font,
+                  fill: fill,
+                  weight: weight,
+                  grade: grade,
+                  opticalSize: opticalSize
+                )
               }
             }
           }
@@ -297,6 +425,55 @@ class CupertinoTabBarNSView: NSView {
       }
     }
     return nil
+  }
+
+  private static func applyFontVariations(
+    to font: NSFont,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
+  ) -> NSFont {
+    guard fill != nil || weight != nil || grade != nil || opticalSize != nil else {
+      return font
+    }
+    guard let axes = CTFontCopyVariationAxes(font as CTFont) as? [[CFString: Any]] else {
+      return font
+    }
+    var variations: [NSNumber: NSNumber] = [:]
+    for axis in axes {
+      guard let axisId = axis[kCTFontVariationAxisIdentifierKey] as? NSNumber,
+            let axisName = (axis[kCTFontVariationAxisNameKey] as? String)?.lowercased() else {
+        continue
+      }
+      let minValue = (axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber)?.doubleValue
+      let maxValue = (axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber)?.doubleValue
+      func setVariation(_ value: CGFloat?) {
+        guard let value else { return }
+        var clamped = Double(value)
+        if let minValue { clamped = max(clamped, minValue) }
+        if let maxValue { clamped = min(clamped, maxValue) }
+        variations[axisId] = NSNumber(value: clamped)
+      }
+
+      if axisName.contains("fill") {
+        setVariation(fill)
+      } else if axisName.contains("weight") {
+        setVariation(weight)
+      } else if axisName.contains("grade") {
+        setVariation(grade)
+      } else if axisName.contains("optical") || axisName.contains("opsz") {
+        setVariation(opticalSize)
+      }
+    }
+    guard !variations.isEmpty else { return font }
+    let variationAttr = NSFontDescriptor.AttributeName(
+      rawValue: kCTFontVariationAttribute as String
+    )
+    let descriptor = font.fontDescriptor.addingAttributes([
+      variationAttr: variations
+    ])
+    return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
   }
 
   private static func directFontNameCandidates(family: String, package: String?) -> [String] {
@@ -424,6 +601,12 @@ class CupertinoTabBarNSView: NSView {
       if let number = element as? NSNumber { return number.boolValue }
       return false
     }
+  }
+
+  private static func parseOptionalCGFloat(_ value: Any?) -> CGFloat? {
+    if value is NSNull { return nil }
+    if let number = value as? NSNumber { return CGFloat(truncating: number) }
+    return nil
   }
 
   private static func parseOptionalDoubleArray(_ value: Any?) -> [CGFloat?] {
