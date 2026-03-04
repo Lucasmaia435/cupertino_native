@@ -20,7 +20,7 @@ class CupertinoTabBarNSView: NSView {
   private var currentIconFontFamilies: [String?] = []
   private var currentIconFontPackages: [String?] = []
   private var currentIconMatchDirections: [Bool] = []
-  private var currentSizes: [NSNumber] = []
+  private var currentSizes: [CGFloat?] = []
   private var currentSelectedIndex: Int = 0
   private var currentTint: NSColor? = nil
   private var currentBackground: NSColor? = nil
@@ -41,7 +41,7 @@ class CupertinoTabBarNSView: NSView {
       currentIconFontFamilies = Self.parseOptionalStringArray(dict["iconDataFontFamilies"])
       currentIconFontPackages = Self.parseOptionalStringArray(dict["iconDataFontPackages"])
       currentIconMatchDirections = Self.parseBoolArray(dict["iconDataMatchTextDirections"])
-      currentSizes = (dict["sfSymbolSizes"] as? [NSNumber]) ?? []
+      currentSizes = Self.parseOptionalDoubleArray(dict["sfSymbolSizes"])
       if let value = dict["selectedIndex"] as? NSNumber { currentSelectedIndex = value.intValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let style = dict["style"] as? [String: Any] {
@@ -105,6 +105,7 @@ class CupertinoTabBarNSView: NSView {
           self.currentIconFontFamilies = Self.parseOptionalStringArray(params["iconDataFontFamilies"])
           self.currentIconFontPackages = Self.parseOptionalStringArray(params["iconDataFontPackages"])
           self.currentIconMatchDirections = Self.parseBoolArray(params["iconDataMatchTextDirections"])
+          self.currentSizes = Self.parseOptionalDoubleArray(params["sfSymbolSizes"])
           self.currentSelectedIndex = (params["selectedIndex"] as? NSNumber)?.intValue ?? self.currentSelectedIndex
           self.configureSegments()
           result(nil)
@@ -188,8 +189,9 @@ class CupertinoTabBarNSView: NSView {
       if !symbolName.isEmpty,
          #available(macOS 11.0, *),
          var image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-        if index < currentSizes.count, #available(macOS 12.0, *) {
-          let size = CGFloat(truncating: currentSizes[index])
+        if index < currentSizes.count,
+           let size = currentSizes[index],
+           #available(macOS 12.0, *) {
           let config = NSImage.SymbolConfiguration(pointSize: size, weight: .regular)
           image = image.withSymbolConfiguration(config) ?? image
         }
@@ -202,7 +204,7 @@ class CupertinoTabBarNSView: NSView {
     }
     let family = index < currentIconFontFamilies.count ? currentIconFontFamilies[index] : nil
     let package = index < currentIconFontPackages.count ? currentIconFontPackages[index] : nil
-    let size = index < currentSizes.count ? CGFloat(truncating: currentSizes[index]) : 18
+    let size = index < currentSizes.count ? (currentSizes[index] ?? 18) : 18
     return Self.iconImage(
       codePoint: codePoint,
       fontFamily: family,
@@ -421,6 +423,17 @@ class CupertinoTabBarNSView: NSView {
     return raw.map { element in
       if let number = element as? NSNumber { return number.boolValue }
       return false
+    }
+  }
+
+  private static func parseOptionalDoubleArray(_ value: Any?) -> [CGFloat?] {
+    guard let raw = value as? [Any] else { return [] }
+    return raw.map { element in
+      if element is NSNull { return nil }
+      if let number = element as? NSNumber {
+        return CGFloat(truncating: number)
+      }
+      return nil
     }
   }
 

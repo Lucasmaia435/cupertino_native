@@ -53,7 +53,7 @@ class _TabBarDemoPageState extends State<TabBarDemoPage> with SingleTickerProvid
             child: CNTabBar(
               iconSize: 24,
               items: [
-                CNTabBarItem(label: 'Dashboard', iconData: Icons.house_outlined),
+                CNTabBarItem(label: 'Dashboard', iconData: Icons.house_outlined, iconDataSize: 48),
                 CNTabBarItem(label: 'Journal', iconData: Icons.book_outlined),
                 CNTabBarItem(label: 'Goals', iconData: Icons.flag_outlined),
                 CNTabBarItem(iconData: Icons.more_horiz_outlined, label: 'More'),
