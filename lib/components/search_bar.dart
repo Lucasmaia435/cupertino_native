@@ -267,7 +267,11 @@ class _CNSearchBarState extends State<CNSearchBar> {
     _controller._attach(channel);
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    // Force one trailing actions sync after attach; some native paths can
+    // ignore creation params during first layout pass.
+    _lastTraillingActionsSignature = null;
     _syncBrightnessIfNeeded();
+    _syncPropsToNativeIfNeeded();
   }
 
   Future<dynamic> _onMethodCall(MethodCall call) async {
@@ -396,6 +400,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
         'iconDataFontFamily': iconData?.fontFamily,
         'iconDataFontPackage': iconData?.fontPackage,
         'iconDataMatchTextDirection': iconData?.matchTextDirection ?? false,
+        'iconDataColor': resolveColorToArgb(icon.color, context),
         'iconDataSize': icon.size,
         'iconDataFill': icon.fill,
         'iconDataWeight': icon.weight,
@@ -414,6 +419,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
         iconData?.fontFamily,
         iconData?.fontPackage,
         iconData?.matchTextDirection,
+        resolveColorToArgb(icon.color, context),
         icon.size,
         icon.fill,
         icon.weight,
