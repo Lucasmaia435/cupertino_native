@@ -8,6 +8,18 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     let assets: [String]
   }
 
+  private struct TrailingAction {
+    let iconDataCodePoint: Int
+    let iconDataFontFamily: String?
+    let iconDataFontPackage: String?
+    let iconDataMatchTextDirection: Bool
+    let iconDataSize: CGFloat
+    let iconDataFill: CGFloat?
+    let iconDataWeight: CGFloat?
+    let iconDataGrade: CGFloat?
+    let iconDataOpticalSize: CGFloat?
+  }
+
   private static var cachedFlutterAssetsURL: URL?
   private static var cachedFontManifest: [FlutterFontManifestEntry]?
 
@@ -28,11 +40,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     var tint: UIColor? = nil
     var bg: UIColor? = nil
     var fieldBg: UIColor? = nil
-    var trailingIconDataCodePoint: Int? = nil
-    var trailingIconDataFontFamily: String? = nil
-    var trailingIconDataFontPackage: String? = nil
-    var trailingIconDataMatchTextDirection: Bool = false
-    var trailingIconEnabled: Bool = false
+    var trailingActions: [TrailingAction] = []
 
     if let dict = args as? [String: Any] {
       if let value = dict["text"] as? String { text = value }
@@ -45,13 +53,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
         if let value = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(value.intValue) }
         if let value = style["fieldBackgroundColor"] as? NSNumber { fieldBg = Self.colorFromARGB(value.intValue) }
       }
-      if let value = dict["trailingIconDataCodePoint"] as? NSNumber { trailingIconDataCodePoint = value.intValue }
-      if let value = dict["trailingIconDataFontFamily"] as? String { trailingIconDataFontFamily = value }
-      if let value = dict["trailingIconDataFontPackage"] as? String { trailingIconDataFontPackage = value }
-      if let value = dict["trailingIconDataMatchTextDirection"] as? NSNumber {
-        trailingIconDataMatchTextDirection = value.boolValue
-      }
-      if let value = dict["trailingIconEnabled"] as? NSNumber { trailingIconEnabled = value.boolValue }
+      trailingActions = Self.parseTrailingActions(dict["traillingActions"])
     }
 
     super.init()
@@ -71,13 +73,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     if let color = tint { searchBar.tintColor = color }
     if let color = bg { searchBar.backgroundColor = color }
     if let color = fieldBg { searchBar.searchTextField.backgroundColor = color }
-    applyTrailingButton(
-      iconDataCodePoint: trailingIconDataCodePoint,
-      iconDataFontFamily: trailingIconDataFontFamily,
-      iconDataFontPackage: trailingIconDataFontPackage,
-      iconDataMatchTextDirection: trailingIconDataMatchTextDirection,
-      enabled: trailingIconEnabled
-    )
+    applyTrailingActions(trailingActions)
 
     container.addSubview(searchBar)
     NSLayoutConstraint.activate([
@@ -118,45 +114,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
           self.searchBar.setShowsCancelButton(value, animated: true)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing showsCancelButton", details: nil)) }
-      case "setTrailingButton":
+      case "setTrailingActions":
         if let params = call.arguments as? [String: Any] {
-          var iconDataCodePoint: Int? = nil
-          var iconDataFontFamily: String? = nil
-          var iconDataFontPackage: String? = nil
-          var iconDataMatchTextDirection: Bool = false
-          var iconEnabled: Bool = false
-
-          if params["trailingIconDataCodePoint"] is NSNull {
-            iconDataCodePoint = nil
-          } else {
-            iconDataCodePoint = (params["trailingIconDataCodePoint"] as? NSNumber)?.intValue
-          }
-          if params["trailingIconDataFontFamily"] is NSNull {
-            iconDataFontFamily = nil
-          } else {
-            iconDataFontFamily = params["trailingIconDataFontFamily"] as? String
-          }
-          if params["trailingIconDataFontPackage"] is NSNull {
-            iconDataFontPackage = nil
-          } else {
-            iconDataFontPackage = params["trailingIconDataFontPackage"] as? String
-          }
-          if let value = params["trailingIconDataMatchTextDirection"] as? NSNumber {
-            iconDataMatchTextDirection = value.boolValue
-          }
-          if let value = params["trailingIconEnabled"] as? NSNumber {
-            iconEnabled = value.boolValue
-          }
-
-          self.applyTrailingButton(
-            iconDataCodePoint: iconDataCodePoint,
-            iconDataFontFamily: iconDataFontFamily,
-            iconDataFontPackage: iconDataFontPackage,
-            iconDataMatchTextDirection: iconDataMatchTextDirection,
-            enabled: iconEnabled
-          )
+          self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
           result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing trailing button args", details: nil)) }
+        } else { result(FlutterError(code: "bad_args", message: "Missing trailing actions args", details: nil)) }
       case "setStyle":
         if let params = call.arguments as? [String: Any] {
           if let value = params["tint"] as? NSNumber {
@@ -210,7 +172,41 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
   }
 
   func searchBarBookmarkButtonClicked(_ searchBar: UISearchBar) {
-    channel.invokeMethod("trailingPressed", arguments: nil)
+    channel.invokeMethod("trailingActionPressed", arguments: ["index": 0])
+  }
+
+  func searchBarResultsListButtonClicked(_ searchBar: UISearchBar) {
+    channel.invokeMethod("trailingActionPressed", arguments: ["index": 1])
+  }
+
+  private static func parseTrailingActions(_ raw: Any?) -> [TrailingAction] {
+    guard let items = raw as? [Any] else { return [] }
+    var actions: [TrailingAction] = []
+    for item in items.prefix(2) {
+      guard let dict = item as? [String: Any],
+            let codePoint = (dict["iconDataCodePoint"] as? NSNumber)?.intValue else {
+        continue
+      }
+      let fontFamily = dict["iconDataFontFamily"] as? String
+      let fontPackage = dict["iconDataFontPackage"] as? String
+      let matchTextDirection =
+        (dict["iconDataMatchTextDirection"] as? NSNumber)?.boolValue ?? false
+      let size = Self.parseOptionalCGFloat(dict["iconDataSize"]) ?? 16
+      actions.append(
+        TrailingAction(
+          iconDataCodePoint: codePoint,
+          iconDataFontFamily: fontFamily,
+          iconDataFontPackage: fontPackage,
+          iconDataMatchTextDirection: matchTextDirection,
+          iconDataSize: size,
+          iconDataFill: Self.parseOptionalCGFloat(dict["iconDataFill"]),
+          iconDataWeight: Self.parseOptionalCGFloat(dict["iconDataWeight"]),
+          iconDataGrade: Self.parseOptionalCGFloat(dict["iconDataGrade"]),
+          iconDataOpticalSize: Self.parseOptionalCGFloat(dict["iconDataOpticalSize"])
+        )
+      )
+    }
+    return actions
   }
 
   private func applyEnabled(_ enabled: Bool) {
@@ -219,46 +215,57 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     searchBar.alpha = enabled ? 1.0 : 0.6
   }
 
-  private func applyTrailingButton(
-    iconDataCodePoint: Int?,
-    iconDataFontFamily: String?,
-    iconDataFontPackage: String?,
-    iconDataMatchTextDirection: Bool,
-    enabled: Bool
-  ) {
-    guard let codePoint = iconDataCodePoint,
+  private func applyTrailingActions(_ actions: [TrailingAction]) {
+    applyTrailingAction(actions.count > 0 ? actions[0] : nil, for: .bookmark)
+    applyTrailingAction(actions.count > 1 ? actions[1] : nil, for: .resultsList)
+    searchBar.showsBookmarkButton = actions.count > 0
+    searchBar.showsSearchResultsButton = actions.count > 1
+  }
+
+  private func applyTrailingAction(_ action: TrailingAction?, for icon: UISearchBar.Icon) {
+    guard let action,
           var image = Self.iconImage(
-            codePoint: codePoint,
-            fontFamily: iconDataFontFamily,
-            fontPackage: iconDataFontPackage,
-            pointSize: 16
+            codePoint: action.iconDataCodePoint,
+            fontFamily: action.iconDataFontFamily,
+            fontPackage: action.iconDataFontPackage,
+            pointSize: action.iconDataSize,
+            fill: action.iconDataFill,
+            weight: action.iconDataWeight,
+            grade: action.iconDataGrade,
+            opticalSize: action.iconDataOpticalSize
           ) else {
-      searchBar.showsBookmarkButton = false
-      searchBar.setImage(nil, for: .bookmark, state: .normal)
-      searchBar.setImage(nil, for: .bookmark, state: .highlighted)
+      searchBar.setImage(nil, for: icon, state: .normal)
+      searchBar.setImage(nil, for: icon, state: .highlighted)
       return
     }
 
-    if iconDataMatchTextDirection {
+    if action.iconDataMatchTextDirection {
       image = image.imageFlippedForRightToLeftLayoutDirection()
     }
-    searchBar.setImage(image, for: .bookmark, state: .normal)
-    searchBar.setImage(image, for: .bookmark, state: .highlighted)
-    searchBar.showsBookmarkButton = enabled
+    searchBar.setImage(image, for: icon, state: .normal)
+    searchBar.setImage(image, for: icon, state: .highlighted)
   }
 
   private static func iconImage(
     codePoint: Int,
     fontFamily: String?,
     fontPackage: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> UIImage? {
     guard let scalar = UnicodeScalar(codePoint) else { return nil }
     let glyph = String(scalar) as NSString
     let resolvedFont = loadIconFont(
       family: fontFamily,
       package: fontPackage,
-      pointSize: pointSize
+      pointSize: pointSize,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) ?? UIFont.systemFont(ofSize: pointSize)
     let canvasSize = CGSize(width: pointSize * 1.8, height: pointSize * 1.8)
     let renderer = UIGraphicsImageRenderer(size: canvasSize)
@@ -285,7 +292,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
   private static func loadIconFont(
     family: String?,
     package: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> UIFont? {
     guard let family else { return nil }
     ensureFlutterFontRegistered(family: family, package: package)
@@ -296,7 +307,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     )
     for candidate in directCandidates {
       if let font = UIFont(name: candidate, size: pointSize) {
-        return font
+        return applyFontVariations(
+          to: font,
+          fill: fill,
+          weight: weight,
+          grade: grade,
+          opticalSize: opticalSize
+        )
       }
     }
 
@@ -305,19 +322,80 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       let familyToken = normalizedFontToken(familyName)
       if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
         if let font = UIFont(name: familyName, size: pointSize) {
-          return font
+          return applyFontVariations(
+            to: font,
+            fill: fill,
+            weight: weight,
+            grade: grade,
+            opticalSize: opticalSize
+          )
         }
       }
       for fontName in UIFont.fontNames(forFamilyName: familyName) {
         let fontToken = normalizedFontToken(fontName)
         if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
           if let font = UIFont(name: fontName, size: pointSize) {
-            return font
+            return applyFontVariations(
+              to: font,
+              fill: fill,
+              weight: weight,
+              grade: grade,
+              opticalSize: opticalSize
+            )
           }
         }
       }
     }
     return nil
+  }
+
+  private static func applyFontVariations(
+    to font: UIFont,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
+  ) -> UIFont {
+    guard fill != nil || weight != nil || grade != nil || opticalSize != nil else {
+      return font
+    }
+    guard let axes = CTFontCopyVariationAxes(font as CTFont) as? [[CFString: Any]] else {
+      return font
+    }
+    var variations: [NSNumber: NSNumber] = [:]
+    for axis in axes {
+      guard let axisId = axis[kCTFontVariationAxisIdentifierKey] as? NSNumber,
+            let axisName = (axis[kCTFontVariationAxisNameKey] as? String)?.lowercased() else {
+        continue
+      }
+      let minValue = (axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber)?.doubleValue
+      let maxValue = (axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber)?.doubleValue
+      func setVariation(_ value: CGFloat?) {
+        guard let value else { return }
+        var clamped = Double(value)
+        if let minValue { clamped = max(clamped, minValue) }
+        if let maxValue { clamped = min(clamped, maxValue) }
+        variations[axisId] = NSNumber(value: clamped)
+      }
+
+      if axisName.contains("fill") {
+        setVariation(fill)
+      } else if axisName.contains("weight") {
+        setVariation(weight)
+      } else if axisName.contains("grade") {
+        setVariation(grade)
+      } else if axisName.contains("optical") || axisName.contains("opsz") {
+        setVariation(opticalSize)
+      }
+    }
+    guard !variations.isEmpty else { return font }
+    let variationAttr = UIFontDescriptor.AttributeName(
+      rawValue: kCTFontVariationAttribute as String
+    )
+    let descriptor = font.fontDescriptor.addingAttributes([
+      variationAttr: variations
+    ])
+    return UIFont(descriptor: descriptor, size: font.pointSize)
   }
 
   private static func directFontNameCandidates(family: String, package: String?) -> [String] {
@@ -419,6 +497,12 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
         return candidate
       }
     }
+    return nil
+  }
+
+  private static func parseOptionalCGFloat(_ value: Any?) -> CGFloat? {
+    if value is NSNull { return nil }
+    if let number = value as? NSNumber { return CGFloat(truncating: number) }
     return nil
   }
 

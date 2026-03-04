@@ -8,19 +8,35 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     let assets: [String]
   }
 
+  private struct TrailingAction {
+    let iconDataCodePoint: Int
+    let iconDataFontFamily: String?
+    let iconDataFontPackage: String?
+    let iconDataMatchTextDirection: Bool
+    let iconDataSize: CGFloat
+    let iconDataFill: CGFloat?
+    let iconDataWeight: CGFloat?
+    let iconDataGrade: CGFloat?
+    let iconDataOpticalSize: CGFloat?
+  }
+
   private static var cachedFlutterAssetsURL: URL?
   private static var cachedFontManifest: [FlutterFontManifestEntry]?
 
   private let channel: FlutterMethodChannel
   private let searchField: NSSearchField
-  private let trailingButton: NSButton
+  private let trailingButtons: [NSButton]
+  private let trailingButtonsStack: NSStackView
   private var searchFieldTrailingConstraint: NSLayoutConstraint!
-  private var trailingButtonEnabled: Bool = false
+  private var trailingButtonsEnabled: [Bool] = [false, false]
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
+    let firstTrailingButton = NSButton(title: "", target: nil, action: nil)
+    let secondTrailingButton = NSButton(title: "", target: nil, action: nil)
     self.channel = FlutterMethodChannel(name: "CupertinoNativeSearchBar_\(viewId)", binaryMessenger: messenger)
     self.searchField = NSSearchField(frame: .zero)
-    self.trailingButton = NSButton(title: "", target: nil, action: nil)
+    self.trailingButtons = [firstTrailingButton, secondTrailingButton]
+    self.trailingButtonsStack = NSStackView(views: [firstTrailingButton, secondTrailingButton])
 
     var text: String = ""
     var placeholder: String? = nil
@@ -29,11 +45,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     var tint: NSColor? = nil
     var bg: NSColor? = nil
     var fieldBg: NSColor? = nil
-    var trailingIconDataCodePoint: Int? = nil
-    var trailingIconDataFontFamily: String? = nil
-    var trailingIconDataFontPackage: String? = nil
-    var trailingIconDataMatchTextDirection: Bool = false
-    var trailingIconEnabled: Bool = false
+    var trailingActions: [TrailingAction] = []
 
     if let dict = args as? [String: Any] {
       if let value = dict["text"] as? String { text = value }
@@ -45,13 +57,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
         if let value = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(value.intValue) }
         if let value = style["fieldBackgroundColor"] as? NSNumber { fieldBg = Self.colorFromARGB(value.intValue) }
       }
-      if let value = dict["trailingIconDataCodePoint"] as? NSNumber { trailingIconDataCodePoint = value.intValue }
-      if let value = dict["trailingIconDataFontFamily"] as? String { trailingIconDataFontFamily = value }
-      if let value = dict["trailingIconDataFontPackage"] as? String { trailingIconDataFontPackage = value }
-      if let value = dict["trailingIconDataMatchTextDirection"] as? NSNumber {
-        trailingIconDataMatchTextDirection = value.boolValue
-      }
-      if let value = dict["trailingIconEnabled"] as? NSNumber { trailingIconEnabled = value.boolValue }
+      trailingActions = Self.parseTrailingActions(dict["traillingActions"])
     }
 
     super.init(frame: .zero)
@@ -69,19 +75,28 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     searchField.placeholderString = placeholder
     searchField.isEnabled = enabled
 
-    trailingButton.translatesAutoresizingMaskIntoConstraints = false
-    trailingButton.bezelStyle = .shadowlessSquare
-    trailingButton.isBordered = false
-    trailingButton.imagePosition = .imageOnly
-    trailingButton.setButtonType(.momentaryChange)
-    trailingButton.target = self
-    trailingButton.action = #selector(onTrailingPressed(_:))
-    trailingButton.isHidden = true
-    trailingButton.isEnabled = false
+    for (index, trailingButton) in trailingButtons.enumerated() {
+      trailingButton.translatesAutoresizingMaskIntoConstraints = false
+      trailingButton.bezelStyle = .shadowlessSquare
+      trailingButton.isBordered = false
+      trailingButton.imagePosition = .imageOnly
+      trailingButton.setButtonType(.momentaryChange)
+      trailingButton.target = self
+      trailingButton.action = #selector(onTrailingPressed(_:))
+      trailingButton.tag = index
+      trailingButton.isHidden = true
+      trailingButton.isEnabled = false
+    }
+
+    trailingButtonsStack.translatesAutoresizingMaskIntoConstraints = false
+    trailingButtonsStack.orientation = .horizontal
+    trailingButtonsStack.alignment = .centerY
+    trailingButtonsStack.spacing = 4
 
     if let color = tint, #available(macOS 10.14, *) {
-      searchField.contentTintColor = color
-      trailingButton.contentTintColor = color
+      for trailingButton in trailingButtons {
+        trailingButton.contentTintColor = color
+      }
     }
     if let color = fieldBg {
       searchField.drawsBackground = true
@@ -92,26 +107,22 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     }
 
     addSubview(searchField)
-    addSubview(trailingButton)
+    addSubview(trailingButtonsStack)
     searchFieldTrailingConstraint = searchField.trailingAnchor.constraint(equalTo: trailingAnchor)
     NSLayoutConstraint.activate([
       searchField.leadingAnchor.constraint(equalTo: leadingAnchor),
       searchFieldTrailingConstraint,
       searchField.topAnchor.constraint(equalTo: topAnchor),
       searchField.bottomAnchor.constraint(equalTo: bottomAnchor),
-      trailingButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-      trailingButton.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
-      trailingButton.widthAnchor.constraint(equalToConstant: 18),
-      trailingButton.heightAnchor.constraint(equalToConstant: 18)
+      trailingButtonsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+      trailingButtonsStack.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
+      trailingButtons[0].widthAnchor.constraint(equalToConstant: 18),
+      trailingButtons[0].heightAnchor.constraint(equalToConstant: 18),
+      trailingButtons[1].widthAnchor.constraint(equalToConstant: 18),
+      trailingButtons[1].heightAnchor.constraint(equalToConstant: 18)
     ])
 
-    applyTrailingButton(
-      iconDataCodePoint: trailingIconDataCodePoint,
-      iconDataFontFamily: trailingIconDataFontFamily,
-      iconDataFontPackage: trailingIconDataFontPackage,
-      iconDataMatchTextDirection: trailingIconDataMatchTextDirection,
-      enabled: trailingIconEnabled
-    )
+    applyTrailingActions(trailingActions)
     applyEnabled(enabled)
 
     channel.setMethodCallHandler { [weak self] call, result in
@@ -142,50 +153,17 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       case "setShowsCancelButton":
         // NSSearchField controls cancel affordance automatically based on text.
         result(nil)
-      case "setTrailingButton":
+      case "setTrailingActions":
         if let params = call.arguments as? [String: Any] {
-          var iconDataCodePoint: Int? = nil
-          var iconDataFontFamily: String? = nil
-          var iconDataFontPackage: String? = nil
-          var iconDataMatchTextDirection: Bool = false
-          var iconEnabled: Bool = false
-
-          if params["trailingIconDataCodePoint"] is NSNull {
-            iconDataCodePoint = nil
-          } else {
-            iconDataCodePoint = (params["trailingIconDataCodePoint"] as? NSNumber)?.intValue
-          }
-          if params["trailingIconDataFontFamily"] is NSNull {
-            iconDataFontFamily = nil
-          } else {
-            iconDataFontFamily = params["trailingIconDataFontFamily"] as? String
-          }
-          if params["trailingIconDataFontPackage"] is NSNull {
-            iconDataFontPackage = nil
-          } else {
-            iconDataFontPackage = params["trailingIconDataFontPackage"] as? String
-          }
-          if let value = params["trailingIconDataMatchTextDirection"] as? NSNumber {
-            iconDataMatchTextDirection = value.boolValue
-          }
-          if let value = params["trailingIconEnabled"] as? NSNumber {
-            iconEnabled = value.boolValue
-          }
-
-          self.applyTrailingButton(
-            iconDataCodePoint: iconDataCodePoint,
-            iconDataFontFamily: iconDataFontFamily,
-            iconDataFontPackage: iconDataFontPackage,
-            iconDataMatchTextDirection: iconDataMatchTextDirection,
-            enabled: iconEnabled
-          )
+          self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
           result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing trailing button args", details: nil)) }
+        } else { result(FlutterError(code: "bad_args", message: "Missing trailing actions args", details: nil)) }
       case "setStyle":
         if let params = call.arguments as? [String: Any] {
           if let value = params["tint"] as? NSNumber, #available(macOS 10.14, *) {
-            self.searchField.contentTintColor = Self.colorFromARGB(value.intValue)
-            self.trailingButton.contentTintColor = Self.colorFromARGB(value.intValue)
+            for trailingButton in self.trailingButtons {
+              trailingButton.contentTintColor = Self.colorFromARGB(value.intValue)
+            }
           }
           if let value = params["backgroundColor"] as? NSNumber {
             self.layer?.backgroundColor = Self.colorFromARGB(value.intValue).cgColor
@@ -221,49 +199,92 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     channel.invokeMethod("textChanged", arguments: ["text": searchField.stringValue])
   }
 
+  private static func parseTrailingActions(_ raw: Any?) -> [TrailingAction] {
+    guard let items = raw as? [Any] else { return [] }
+    var actions: [TrailingAction] = []
+    for item in items.prefix(2) {
+      guard let dict = item as? [String: Any],
+            let codePoint = (dict["iconDataCodePoint"] as? NSNumber)?.intValue else {
+        continue
+      }
+      let fontFamily = dict["iconDataFontFamily"] as? String
+      let fontPackage = dict["iconDataFontPackage"] as? String
+      let matchTextDirection =
+        (dict["iconDataMatchTextDirection"] as? NSNumber)?.boolValue ?? false
+      let size = Self.parseOptionalCGFloat(dict["iconDataSize"]) ?? 16
+      actions.append(
+        TrailingAction(
+          iconDataCodePoint: codePoint,
+          iconDataFontFamily: fontFamily,
+          iconDataFontPackage: fontPackage,
+          iconDataMatchTextDirection: matchTextDirection,
+          iconDataSize: size,
+          iconDataFill: Self.parseOptionalCGFloat(dict["iconDataFill"]),
+          iconDataWeight: Self.parseOptionalCGFloat(dict["iconDataWeight"]),
+          iconDataGrade: Self.parseOptionalCGFloat(dict["iconDataGrade"]),
+          iconDataOpticalSize: Self.parseOptionalCGFloat(dict["iconDataOpticalSize"])
+        )
+      )
+    }
+    return actions
+  }
+
   @objc private func onSubmit(_ sender: NSSearchField) {
     channel.invokeMethod("submitted", arguments: ["text": sender.stringValue])
   }
 
   @objc private func onTrailingPressed(_ sender: NSButton) {
-    guard trailingButtonEnabled, searchField.isEnabled else { return }
-    channel.invokeMethod("trailingPressed", arguments: nil)
+    let index = sender.tag
+    guard index >= 0,
+          index < trailingButtonsEnabled.count,
+          trailingButtonsEnabled[index],
+          searchField.isEnabled else {
+      return
+    }
+    channel.invokeMethod("trailingActionPressed", arguments: ["index": index])
   }
 
   private func applyEnabled(_ enabled: Bool) {
     searchField.isEnabled = enabled
     searchField.alphaValue = enabled ? 1.0 : 0.6
-    trailingButton.isEnabled = enabled && trailingButtonEnabled
-    trailingButton.alphaValue = trailingButton.isEnabled ? 1.0 : 0.6
+    for (index, trailingButton) in trailingButtons.enumerated() {
+      trailingButton.isEnabled = enabled && trailingButtonsEnabled[index]
+      trailingButton.alphaValue = trailingButton.isEnabled ? 1.0 : 0.6
+    }
   }
 
-  private func applyTrailingButton(
-    iconDataCodePoint: Int?,
-    iconDataFontFamily: String?,
-    iconDataFontPackage: String?,
-    iconDataMatchTextDirection: Bool,
-    enabled: Bool
-  ) {
-    guard let codePoint = iconDataCodePoint,
-          let image = Self.iconImage(
-            codePoint: codePoint,
-            fontFamily: iconDataFontFamily,
-            fontPackage: iconDataFontPackage,
-            pointSize: 16
-          ) else {
-      trailingButton.image = nil
-      trailingButton.isHidden = true
-      trailingButtonEnabled = false
-      searchFieldTrailingConstraint.constant = 0
-      return
+  private func applyTrailingActions(_ actions: [TrailingAction]) {
+    for index in 0..<trailingButtons.count {
+      guard index < actions.count,
+            let image = Self.iconImage(
+              codePoint: actions[index].iconDataCodePoint,
+              fontFamily: actions[index].iconDataFontFamily,
+              fontPackage: actions[index].iconDataFontPackage,
+              pointSize: actions[index].iconDataSize,
+              fill: actions[index].iconDataFill,
+              weight: actions[index].iconDataWeight,
+              grade: actions[index].iconDataGrade,
+              opticalSize: actions[index].iconDataOpticalSize
+            ) else {
+        trailingButtons[index].image = nil
+        trailingButtons[index].isHidden = true
+        trailingButtonsEnabled[index] = false
+        continue
+      }
+      let _ = actions[index].iconDataMatchTextDirection
+      trailingButtons[index].image = image
+      trailingButtons[index].isHidden = false
+      trailingButtonsEnabled[index] = true
     }
 
-    let _ = iconDataMatchTextDirection
-
-    trailingButton.image = image
-    trailingButton.isHidden = false
-    trailingButtonEnabled = enabled
-    searchFieldTrailingConstraint.constant = -28
+    let visibleCount = trailingButtons.filter { !$0.isHidden }.count
+    if visibleCount == 0 {
+      searchFieldTrailingConstraint.constant = 0
+    } else {
+      let iconWidth = CGFloat(visibleCount) * 18
+      let spacing = CGFloat(max(0, visibleCount - 1)) * trailingButtonsStack.spacing
+      searchFieldTrailingConstraint.constant = -(iconWidth + spacing + 10)
+    }
     applyEnabled(searchField.isEnabled)
   }
 
@@ -271,14 +292,22 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     codePoint: Int,
     fontFamily: String?,
     fontPackage: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> NSImage? {
     guard let scalar = UnicodeScalar(codePoint) else { return nil }
     let glyph = String(scalar) as NSString
     let resolvedFont = loadIconFont(
       family: fontFamily,
       package: fontPackage,
-      pointSize: pointSize
+      pointSize: pointSize,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) ?? NSFont.systemFont(ofSize: pointSize)
     let canvasSize = NSSize(width: pointSize * 1.8, height: pointSize * 1.8)
     let image = NSImage(size: canvasSize)
@@ -306,7 +335,11 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
   private static func loadIconFont(
     family: String?,
     package: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> NSFont? {
     guard let family else { return nil }
     ensureFlutterFontRegistered(family: family, package: package)
@@ -317,7 +350,13 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     )
     for candidate in directCandidates {
       if let font = NSFont(name: candidate, size: pointSize) {
-        return font
+        return applyFontVariations(
+          to: font,
+          fill: fill,
+          weight: weight,
+          grade: grade,
+          opticalSize: opticalSize
+        )
       }
     }
 
@@ -326,7 +365,13 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       let familyToken = normalizedFontToken(familyName)
       if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
         if let font = NSFont(name: familyName, size: pointSize) {
-          return font
+          return applyFontVariations(
+            to: font,
+            fill: fill,
+            weight: weight,
+            grade: grade,
+            opticalSize: opticalSize
+          )
         }
       }
       if let members = NSFontManager.shared.availableMembers(ofFontFamily: familyName) {
@@ -335,7 +380,13 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
             let fontToken = normalizedFontToken(fontName)
             if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
               if let font = NSFont(name: fontName, size: pointSize) {
-                return font
+                return applyFontVariations(
+                  to: font,
+                  fill: fill,
+                  weight: weight,
+                  grade: grade,
+                  opticalSize: opticalSize
+                )
               }
             }
           }
@@ -343,6 +394,55 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       }
     }
     return nil
+  }
+
+  private static func applyFontVariations(
+    to font: NSFont,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
+  ) -> NSFont {
+    guard fill != nil || weight != nil || grade != nil || opticalSize != nil else {
+      return font
+    }
+    guard let axes = CTFontCopyVariationAxes(font as CTFont) as? [[CFString: Any]] else {
+      return font
+    }
+    var variations: [NSNumber: NSNumber] = [:]
+    for axis in axes {
+      guard let axisId = axis[kCTFontVariationAxisIdentifierKey] as? NSNumber,
+            let axisName = (axis[kCTFontVariationAxisNameKey] as? String)?.lowercased() else {
+        continue
+      }
+      let minValue = (axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber)?.doubleValue
+      let maxValue = (axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber)?.doubleValue
+      func setVariation(_ value: CGFloat?) {
+        guard let value else { return }
+        var clamped = Double(value)
+        if let minValue { clamped = max(clamped, minValue) }
+        if let maxValue { clamped = min(clamped, maxValue) }
+        variations[axisId] = NSNumber(value: clamped)
+      }
+
+      if axisName.contains("fill") {
+        setVariation(fill)
+      } else if axisName.contains("weight") {
+        setVariation(weight)
+      } else if axisName.contains("grade") {
+        setVariation(grade)
+      } else if axisName.contains("optical") || axisName.contains("opsz") {
+        setVariation(opticalSize)
+      }
+    }
+    guard !variations.isEmpty else { return font }
+    let variationAttr = NSFontDescriptor.AttributeName(
+      rawValue: kCTFontVariationAttribute as String
+    )
+    let descriptor = font.fontDescriptor.addingAttributes([
+      variationAttr: variations
+    ])
+    return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
   }
 
   private static func directFontNameCandidates(family: String, package: String?) -> [String] {
@@ -443,6 +543,12 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
         return candidate
       }
     }
+    return nil
+  }
+
+  private static func parseOptionalCGFloat(_ value: Any?) -> CGFloat? {
+    if value is NSNull { return nil }
+    if let number = value as? NSNumber { return CGFloat(truncating: number) }
     return nil
   }
 

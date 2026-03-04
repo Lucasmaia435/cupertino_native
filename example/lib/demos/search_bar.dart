@@ -33,13 +33,23 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
               placeholder: 'Search',
               enabled: _enabled,
               showsCancelButton: _showsCancelButton,
-              trailingIcon: Icons.qr_code_scanner_outlined,
+              traillingActions: [
+                CNSearchBarAction(
+                  icon: const Icon(Icons.qr_code_scanner, fill: 1),
+                  onPressed: () {
+                    setState(() => _lastTrailingAction = 'Scanner tapped');
+                  },
+                ),
+                CNSearchBarAction(
+                  icon: const Icon(Icons.tune, fill: 1),
+                  onPressed: () {
+                    setState(() => _lastTrailingAction = 'Filter tapped');
+                  },
+                ),
+              ],
               controller: _controller,
               onChanged: (value) => setState(() => _query = value),
               onSubmitted: (value) => setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value),
-              onTrailingPressed: () {
-                setState(() => _lastTrailingAction = 'Filter tapped');
-              },
               onCancelled: () {
                 setState(() {
                   _query = '';
