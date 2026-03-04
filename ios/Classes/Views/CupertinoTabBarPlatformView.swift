@@ -29,6 +29,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentIconFontFamilies: [String?] = []
   private var currentIconFontPackages: [String?] = []
   private var currentIconMatchDirections: [Bool] = []
+  private var currentIconFills: [CGFloat?] = []
+  private var currentIconWeights: [CGFloat?] = []
+  private var currentIconGrades: [CGFloat?] = []
+  private var currentIconOpticalSizes: [CGFloat?] = []
   private var currentSizes: [CGFloat?] = []
   private var currentTintColor: UIColor? = nil
   private var currentBackgroundColor: UIColor? = nil
@@ -50,6 +54,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       currentIconFontFamilies = Self.parseOptionalStringArray(dict["iconDataFontFamilies"])
       currentIconFontPackages = Self.parseOptionalStringArray(dict["iconDataFontPackages"])
       currentIconMatchDirections = Self.parseBoolArray(dict["iconDataMatchTextDirections"])
+      currentIconFills = Self.parseOptionalDoubleArray(dict["iconDataFills"])
+      currentIconWeights = Self.parseOptionalDoubleArray(dict["iconDataWeights"])
+      currentIconGrades = Self.parseOptionalDoubleArray(dict["iconDataGrades"])
+      currentIconOpticalSizes = Self.parseOptionalDoubleArray(dict["iconDataOpticalSizes"])
       currentSizes = Self.parseOptionalDoubleArray(dict["sfSymbolSizes"])
       if let value = dict["selectedIndex"] as? NSNumber { selectedIndex = value.intValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
@@ -100,12 +108,24 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           self.currentIconFontFamilies = Self.parseOptionalStringArray(params["iconDataFontFamilies"])
           self.currentIconFontPackages = Self.parseOptionalStringArray(params["iconDataFontPackages"])
           self.currentIconMatchDirections = Self.parseBoolArray(params["iconDataMatchTextDirections"])
+          self.currentIconFills = Self.parseOptionalDoubleArray(params["iconDataFills"])
+          self.currentIconWeights = Self.parseOptionalDoubleArray(params["iconDataWeights"])
+          self.currentIconGrades = Self.parseOptionalDoubleArray(params["iconDataGrades"])
+          self.currentIconOpticalSizes = Self.parseOptionalDoubleArray(params["iconDataOpticalSizes"])
           self.currentSizes = Self.parseOptionalDoubleArray(params["sfSymbolSizes"])
           let selectedIndex = (params["selectedIndex"] as? NSNumber)?.intValue ?? 0
           self.rebuildBars(selectedIndex: selectedIndex)
           result(nil)
         } else {
           result(FlutterError(code: "bad_args", message: "Missing items", details: nil))
+        }
+      case "setItemIconStyle":
+        if let params = call.arguments as? [String: Any],
+           let index = (params["index"] as? NSNumber)?.intValue {
+          self.updateItemIconStyle(at: index, params: params)
+          result(nil)
+        } else {
+          result(FlutterError(code: "bad_args", message: "Missing icon style args", details: nil))
         }
       case "setLayout":
         if let params = call.arguments as? [String: Any] {
@@ -293,12 +313,77 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     }
   }
 
+  private func updateItemIconStyle(at index: Int, params: [String: Any]) {
+    guard index >= 0 else { return }
+    ensureStyleCapacity(index: index)
+
+    if params.keys.contains("sfSymbolSize") {
+      currentSizes[index] = Self.parseOptionalCGFloat(params["sfSymbolSize"])
+    }
+    if params.keys.contains("iconDataFill") {
+      currentIconFills[index] = Self.parseOptionalCGFloat(params["iconDataFill"])
+    }
+    if params.keys.contains("iconDataWeight") {
+      currentIconWeights[index] = Self.parseOptionalCGFloat(params["iconDataWeight"])
+    }
+    if params.keys.contains("iconDataGrade") {
+      currentIconGrades[index] = Self.parseOptionalCGFloat(params["iconDataGrade"])
+    }
+    if params.keys.contains("iconDataOpticalSize") {
+      currentIconOpticalSizes[index] = Self.parseOptionalCGFloat(params["iconDataOpticalSize"])
+    }
+
+    let image = imageForItem(index)
+    if let bar = tabBar, let items = bar.items, index < items.count {
+      items[index].image = image
+      items[index].selectedImage = image
+      return
+    }
+    if let left = tabBarLeft, let leftItems = left.items {
+      if index < leftItems.count {
+        leftItems[index].image = image
+        leftItems[index].selectedImage = image
+        return
+      }
+      if let right = tabBarRight, let rightItems = right.items {
+        let rightIndex = index - leftItems.count
+        if rightIndex >= 0, rightIndex < rightItems.count {
+          rightItems[rightIndex].image = image
+          rightItems[rightIndex].selectedImage = image
+        }
+      }
+    }
+  }
+
+  private func ensureStyleCapacity(index: Int) {
+    let targetCount = index + 1
+    func expand<T>(_ array: inout [T?]) {
+      if array.count < targetCount {
+        array.append(contentsOf: Array(repeating: nil, count: targetCount - array.count))
+      }
+    }
+    expand(&currentSizes)
+    expand(&currentIconFills)
+    expand(&currentIconWeights)
+    expand(&currentIconGrades)
+    expand(&currentIconOpticalSizes)
+  }
+
   private func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
     var items: [UITabBarItem] = []
+    let normalAttrs: [NSAttributedString.Key: Any] = [
+      .font: UIFont.systemFont(ofSize: 10, weight: .regular)
+    ]
+    let selectedAttrs: [NSAttributedString.Key: Any] = [
+      .font: UIFont.systemFont(ofSize: 10, weight: .semibold)
+    ]
     for index in range {
       let title = index < currentLabels.count ? currentLabels[index] : nil
       let image = imageForItem(index)
-      items.append(UITabBarItem(title: title, image: image, selectedImage: image))
+      let item = UITabBarItem(title: title, image: image, selectedImage: image)
+      item.setTitleTextAttributes(normalAttrs, for: .normal)
+      item.setTitleTextAttributes(selectedAttrs, for: .selected)
+      items.append(item)
     }
     return items
   }
@@ -323,6 +408,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
 
     let family = index < currentIconFontFamilies.count ? currentIconFontFamilies[index] : nil
     let package = index < currentIconFontPackages.count ? currentIconFontPackages[index] : nil
+    let fill = index < currentIconFills.count ? currentIconFills[index] : nil
+    let weight = index < currentIconWeights.count ? currentIconWeights[index] : nil
+    let grade = index < currentIconGrades.count ? currentIconGrades[index] : nil
+    let opticalSize = index < currentIconOpticalSizes.count
+      ? currentIconOpticalSizes[index]
+      : nil
     let pointSize: CGFloat = index < currentSizes.count
       ? (currentSizes[index] ?? 20)
       : 20
@@ -330,7 +421,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       codePoint: codePoint,
       fontFamily: family,
       fontPackage: package,
-      pointSize: pointSize
+      pointSize: pointSize,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) else {
       return nil
     }
@@ -348,14 +443,22 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     codePoint: Int,
     fontFamily: String?,
     fontPackage: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> UIImage? {
     guard let scalar = UnicodeScalar(codePoint) else { return nil }
     let glyph = String(scalar) as NSString
     let resolvedFont = loadIconFont(
       family: fontFamily,
       package: fontPackage,
-      pointSize: pointSize
+      pointSize: pointSize,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) ?? UIFont.systemFont(ofSize: pointSize)
     let canvasSize = CGSize(width: pointSize * 1.8, height: pointSize * 1.8)
     let renderer = UIGraphicsImageRenderer(size: canvasSize)
@@ -382,7 +485,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private static func loadIconFont(
     family: String?,
     package: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> UIFont? {
     guard let family else { return nil }
     ensureFlutterFontRegistered(family: family, package: package)
@@ -393,7 +500,13 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     )
     for candidate in directCandidates {
       if let font = UIFont(name: candidate, size: pointSize) {
-        return font
+        return applyFontVariations(
+          to: font,
+          fill: fill,
+          weight: weight,
+          grade: grade,
+          opticalSize: opticalSize
+        )
       }
     }
 
@@ -402,19 +515,80 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       let familyToken = normalizedFontToken(familyName)
       if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
         if let font = UIFont(name: familyName, size: pointSize) {
-          return font
+          return applyFontVariations(
+            to: font,
+            fill: fill,
+            weight: weight,
+            grade: grade,
+            opticalSize: opticalSize
+          )
         }
       }
       for fontName in UIFont.fontNames(forFamilyName: familyName) {
         let fontToken = normalizedFontToken(fontName)
         if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
           if let font = UIFont(name: fontName, size: pointSize) {
-            return font
+            return applyFontVariations(
+              to: font,
+              fill: fill,
+              weight: weight,
+              grade: grade,
+              opticalSize: opticalSize
+            )
           }
         }
       }
     }
     return nil
+  }
+
+  private static func applyFontVariations(
+    to font: UIFont,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
+  ) -> UIFont {
+    guard fill != nil || weight != nil || grade != nil || opticalSize != nil else {
+      return font
+    }
+    guard let axes = CTFontCopyVariationAxes(font as CTFont) as? [[CFString: Any]] else {
+      return font
+    }
+    var variations: [NSNumber: NSNumber] = [:]
+    for axis in axes {
+      guard let axisId = axis[kCTFontVariationAxisIdentifierKey] as? NSNumber,
+            let axisName = (axis[kCTFontVariationAxisNameKey] as? String)?.lowercased() else {
+        continue
+      }
+      let minValue = (axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber)?.doubleValue
+      let maxValue = (axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber)?.doubleValue
+      func setVariation(_ value: CGFloat?) {
+        guard let value else { return }
+        var clamped = Double(value)
+        if let minValue { clamped = max(clamped, minValue) }
+        if let maxValue { clamped = min(clamped, maxValue) }
+        variations[axisId] = NSNumber(value: clamped)
+      }
+
+      if axisName.contains("fill") {
+        setVariation(fill)
+      } else if axisName.contains("weight") {
+        setVariation(weight)
+      } else if axisName.contains("grade") {
+        setVariation(grade)
+      } else if axisName.contains("optical") || axisName.contains("opsz") {
+        setVariation(opticalSize)
+      }
+    }
+    guard !variations.isEmpty else { return font }
+    let variationAttr = UIFontDescriptor.AttributeName(
+      rawValue: kCTFontVariationAttribute as String
+    )
+    let descriptor = font.fontDescriptor.addingAttributes([
+      variationAttr: variations
+    ])
+    return UIFont(descriptor: descriptor, size: font.pointSize)
   }
 
   private static func directFontNameCandidates(family: String, package: String?) -> [String] {
@@ -543,6 +717,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let number = element as? NSNumber { return number.boolValue }
       return false
     }
+  }
+
+  private static func parseOptionalCGFloat(_ value: Any?) -> CGFloat? {
+    if value is NSNull { return nil }
+    if let number = value as? NSNumber { return CGFloat(truncating: number) }
+    return nil
   }
 
   private static func parseOptionalDoubleArray(_ value: Any?) -> [CGFloat?] {

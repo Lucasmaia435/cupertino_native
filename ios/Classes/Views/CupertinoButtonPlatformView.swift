@@ -37,6 +37,10 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     var iconDataFontFamily: String? = nil
     var iconDataFontPackage: String? = nil
     var iconDataMatchDirection: Bool = false
+    var iconDataFill: CGFloat? = nil
+    var iconDataWeight: CGFloat? = nil
+    var iconDataGrade: CGFloat? = nil
+    var iconDataOpticalSize: CGFloat? = nil
 
     if let dict = args as? [String: Any] {
       if let t = dict["buttonTitle"] as? String { title = t }
@@ -61,6 +65,18 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       }
       if let match = dict["buttonIconDataMatchTextDirection"] as? NSNumber {
         iconDataMatchDirection = match.boolValue
+      }
+      if let value = dict["buttonIconDataFill"] as? NSNumber {
+        iconDataFill = CGFloat(truncating: value)
+      }
+      if let value = dict["buttonIconDataWeight"] as? NSNumber {
+        iconDataWeight = CGFloat(truncating: value)
+      }
+      if let value = dict["buttonIconDataGrade"] as? NSNumber {
+        iconDataGrade = CGFloat(truncating: value)
+      }
+      if let value = dict["buttonIconDataOpticalSize"] as? NSNumber {
+        iconDataOpticalSize = CGFloat(truncating: value)
       }
     }
 
@@ -124,7 +140,11 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         codePoint: codePoint,
         fontFamily: iconDataFontFamily,
         fontPackage: iconDataFontPackage,
-        pointSize: pointSize
+        pointSize: pointSize,
+        fill: iconDataFill,
+        weight: iconDataWeight,
+        grade: iconDataGrade,
+        opticalSize: iconDataOpticalSize
       ) {
         if iconDataMatchDirection {
           image = image.imageFlippedForRightToLeftLayoutDirection()
@@ -240,12 +260,20 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     }
     let fontFamily = args["buttonIconDataFontFamily"] as? String
     let fontPackage = args["buttonIconDataFontPackage"] as? String
+    let fill = (args["buttonIconDataFill"] as? NSNumber).map { CGFloat(truncating: $0) }
+    let weight = (args["buttonIconDataWeight"] as? NSNumber).map { CGFloat(truncating: $0) }
+    let grade = (args["buttonIconDataGrade"] as? NSNumber).map { CGFloat(truncating: $0) }
+    let opticalSize = (args["buttonIconDataOpticalSize"] as? NSNumber).map { CGFloat(truncating: $0) }
     let size = pointSize ?? 20
     guard var image = iconImage(
       codePoint: codePoint,
       fontFamily: fontFamily,
       fontPackage: fontPackage,
-      pointSize: size
+      pointSize: size,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) else {
       return nil
     }
@@ -259,14 +287,22 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     codePoint: Int,
     fontFamily: String?,
     fontPackage: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> UIImage? {
     guard let scalar = UnicodeScalar(codePoint) else { return nil }
     let glyph = String(scalar) as NSString
     let resolvedFont = loadIconFont(
       family: fontFamily,
       package: fontPackage,
-      pointSize: pointSize
+      pointSize: pointSize,
+      fill: fill,
+      weight: weight,
+      grade: grade,
+      opticalSize: opticalSize
     ) ?? UIFont.systemFont(ofSize: pointSize)
     let canvasSize = CGSize(width: pointSize * 1.8, height: pointSize * 1.8)
     let renderer = UIGraphicsImageRenderer(size: canvasSize)
@@ -293,7 +329,11 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private static func loadIconFont(
     family: String?,
     package: String?,
-    pointSize: CGFloat
+    pointSize: CGFloat,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
   ) -> UIFont? {
     guard let family else { return nil }
     ensureFlutterFontRegistered(family: family, package: package)
@@ -304,7 +344,13 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     )
     for candidate in directCandidates {
       if let font = UIFont(name: candidate, size: pointSize) {
-        return font
+        return applyFontVariations(
+          to: font,
+          fill: fill,
+          weight: weight,
+          grade: grade,
+          opticalSize: opticalSize
+        )
       }
     }
 
@@ -313,19 +359,80 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       let familyToken = normalizedFontToken(familyName)
       if familyToken == wanted || familyToken.contains(wanted) || wanted.contains(familyToken) {
         if let font = UIFont(name: familyName, size: pointSize) {
-          return font
+          return applyFontVariations(
+            to: font,
+            fill: fill,
+            weight: weight,
+            grade: grade,
+            opticalSize: opticalSize
+          )
         }
       }
       for fontName in UIFont.fontNames(forFamilyName: familyName) {
         let fontToken = normalizedFontToken(fontName)
         if fontToken == wanted || fontToken.contains(wanted) || wanted.contains(fontToken) {
           if let font = UIFont(name: fontName, size: pointSize) {
-            return font
+            return applyFontVariations(
+              to: font,
+              fill: fill,
+              weight: weight,
+              grade: grade,
+              opticalSize: opticalSize
+            )
           }
         }
       }
     }
     return nil
+  }
+
+  private static func applyFontVariations(
+    to font: UIFont,
+    fill: CGFloat?,
+    weight: CGFloat?,
+    grade: CGFloat?,
+    opticalSize: CGFloat?
+  ) -> UIFont {
+    guard fill != nil || weight != nil || grade != nil || opticalSize != nil else {
+      return font
+    }
+    guard let axes = CTFontCopyVariationAxes(font as CTFont) as? [[CFString: Any]] else {
+      return font
+    }
+    var variations: [NSNumber: NSNumber] = [:]
+    for axis in axes {
+      guard let axisId = axis[kCTFontVariationAxisIdentifierKey] as? NSNumber,
+            let axisName = (axis[kCTFontVariationAxisNameKey] as? String)?.lowercased() else {
+        continue
+      }
+      let minValue = (axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber)?.doubleValue
+      let maxValue = (axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber)?.doubleValue
+      func setVariation(_ value: CGFloat?) {
+        guard let value else { return }
+        var clamped = Double(value)
+        if let minValue { clamped = max(clamped, minValue) }
+        if let maxValue { clamped = min(clamped, maxValue) }
+        variations[axisId] = NSNumber(value: clamped)
+      }
+
+      if axisName.contains("fill") {
+        setVariation(fill)
+      } else if axisName.contains("weight") {
+        setVariation(weight)
+      } else if axisName.contains("grade") {
+        setVariation(grade)
+      } else if axisName.contains("optical") || axisName.contains("opsz") {
+        setVariation(opticalSize)
+      }
+    }
+    guard !variations.isEmpty else { return font }
+    let variationAttr = UIFontDescriptor.AttributeName(
+      rawValue: kCTFontVariationAttribute as String
+    )
+    let descriptor = font.fontDescriptor.addingAttributes([
+      variationAttr: variations
+    ])
+    return UIFont(descriptor: descriptor, size: font.pointSize)
   }
 
   private static func directFontNameCandidates(family: String, package: String?) -> [String] {

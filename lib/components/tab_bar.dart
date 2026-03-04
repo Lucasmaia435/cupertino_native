@@ -11,19 +11,10 @@ class CNTabBarItem {
   const CNTabBarItem({
     this.label,
     this.icon,
-    this.iconData,
-    this.iconDataSize,
-  })  : assert(
-          icon == null || iconData == null,
-          'Use either icon (CNSymbol) or iconData (IconData), not both.',
-        ),
-        assert(
-          icon == null || iconDataSize == null,
-          'iconDataSize can only be used with iconData.',
-        ),
-        assert(
-          iconData != null || iconDataSize == null,
-          'iconDataSize requires iconData.',
+    this.flutterIcon,
+  }) : assert(
+          icon == null || flutterIcon == null,
+          'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
         );
 
   /// Optional tab item label.
@@ -32,13 +23,10 @@ class CNTabBarItem {
   /// Optional SF Symbol for the item.
   final CNSymbol? icon;
 
-  /// Optional Flutter [IconData] for the item.
+  /// Optional Flutter [Icon] for the item.
   ///
-  /// This allows using icon fonts such as `CupertinoIcons` and `Icons`.
-  final IconData? iconData;
-
-  /// Icon size used when [iconData] is provided.
-  final double? iconDataSize;
+  /// This allows variable-font properties like fill/weight.
+  final Icon? flutterIcon;
 }
 
 /// A Cupertino-native tab bar. Uses native UITabBar/NSTabView style visuals.
@@ -110,6 +98,10 @@ class _CNTabBarState extends State<CNTabBar> {
   List<String?>? _lastIconFontPackages;
   List<bool>? _lastIconMatchTextDirections;
   List<double?>? _lastSizes;
+  List<double?>? _lastIconFills;
+  List<double?>? _lastIconWeights;
+  List<double?>? _lastIconGrades;
+  List<double?>? _lastIconOpticalSizes;
   bool? _lastSplit;
   int? _lastRightCount;
   double? _lastSplitSpacing;
@@ -117,8 +109,14 @@ class _CNTabBarState extends State<CNTabBar> {
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
+  IconData? _itemIconData(CNTabBarItem item) => item.flutterIcon?.icon;
+  double? _itemIconFill(CNTabBarItem item) => item.flutterIcon?.fill;
+  double? _itemIconWeight(CNTabBarItem item) => item.flutterIcon?.weight;
+  double? _itemIconGrade(CNTabBarItem item) => item.flutterIcon?.grade;
+  double? _itemIconOpticalSize(CNTabBarItem item) =>
+      item.flutterIcon?.opticalSize;
   double? _effectiveItemIconSize(CNTabBarItem item) =>
-      item.icon?.size ?? item.iconDataSize ?? widget.iconSize;
+      item.icon?.size ?? item.flutterIcon?.size ?? widget.iconSize;
 
   @override
   void didUpdateWidget(covariant CNTabBar oldWidget) {
@@ -143,10 +141,21 @@ class _CNTabBarState extends State<CNTabBar> {
           items: [
             for (final item in widget.items)
               BottomNavigationBarItem(
-                icon: Icon(
-                  item.iconData ?? CupertinoIcons.circle,
-                  size: _effectiveItemIconSize(item),
-                ),
+                icon: item.flutterIcon != null
+                    ? Icon(
+                        item.flutterIcon!.icon ?? CupertinoIcons.circle,
+                        size: _effectiveItemIconSize(item),
+                        color: item.flutterIcon!.color,
+                        fill: item.flutterIcon!.fill,
+                        weight: item.flutterIcon!.weight,
+                        grade: item.flutterIcon!.grade,
+                        opticalSize: item.flutterIcon!.opticalSize,
+                        shadows: item.flutterIcon!.shadows,
+                      )
+                    : Icon(
+                        CupertinoIcons.circle,
+                        size: _effectiveItemIconSize(item),
+                      ),
                 label: item.label,
               ),
           ],
@@ -162,17 +171,23 @@ class _CNTabBarState extends State<CNTabBar> {
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
     final iconCodePoints =
-        widget.items.map((e) => e.iconData?.codePoint).toList();
+        widget.items.map((e) => _itemIconData(e)?.codePoint).toList();
     final iconFontFamilies =
-        widget.items.map((e) => e.iconData?.fontFamily).toList();
+        widget.items.map((e) => _itemIconData(e)?.fontFamily).toList();
     final iconFontPackages =
-        widget.items.map((e) => e.iconData?.fontPackage).toList();
+        widget.items.map((e) => _itemIconData(e)?.fontPackage).toList();
     final iconMatchTextDirections = widget.items
-        .map((e) => e.iconData?.matchTextDirection ?? false)
+        .map((e) => _itemIconData(e)?.matchTextDirection ?? false)
         .toList();
     final sizes = widget.items.map((e) => _effectiveItemIconSize(e)).toList();
+    final iconFills = widget.items.map((e) => _itemIconFill(e)).toList();
+    final iconWeights = widget.items.map((e) => _itemIconWeight(e)).toList();
+    final iconGrades = widget.items.map((e) => _itemIconGrade(e)).toList();
+    final iconOpticalSizes =
+        widget.items.map((e) => _itemIconOpticalSize(e)).toList();
     final colors = widget.items
-        .map((e) => resolveColorToArgb(e.icon?.color, context))
+        .map((e) =>
+            resolveColorToArgb(e.icon?.color ?? e.flutterIcon?.color, context))
         .toList();
 
     final creationParams = <String, dynamic>{
@@ -182,6 +197,10 @@ class _CNTabBarState extends State<CNTabBar> {
       'iconDataFontFamilies': iconFontFamilies,
       'iconDataFontPackages': iconFontPackages,
       'iconDataMatchTextDirections': iconMatchTextDirections,
+      'iconDataFills': iconFills,
+      'iconDataWeights': iconWeights,
+      'iconDataGrades': iconGrades,
+      'iconDataOpticalSizes': iconOpticalSizes,
       'sfSymbolSizes': sizes,
       'sfSymbolColors': colors,
       'selectedIndex': widget.currentIndex,
@@ -278,16 +297,22 @@ class _CNTabBarState extends State<CNTabBar> {
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
     final iconCodePoints =
-        widget.items.map((e) => e.iconData?.codePoint).toList();
+        widget.items.map((e) => _itemIconData(e)?.codePoint).toList();
     final iconFontFamilies =
-        widget.items.map((e) => e.iconData?.fontFamily).toList();
+        widget.items.map((e) => _itemIconData(e)?.fontFamily).toList();
     final iconFontPackages =
-        widget.items.map((e) => e.iconData?.fontPackage).toList();
+        widget.items.map((e) => _itemIconData(e)?.fontPackage).toList();
     final iconMatchTextDirections = widget.items
-        .map((e) => e.iconData?.matchTextDirection ?? false)
+        .map((e) => _itemIconData(e)?.matchTextDirection ?? false)
         .toList();
     final sizes = widget.items.map((e) => _effectiveItemIconSize(e)).toList();
-    if (_listSignature(_lastLabels) != _listSignature(labels) ||
+    final iconFills = widget.items.map((e) => _itemIconFill(e)).toList();
+    final iconWeights = widget.items.map((e) => _itemIconWeight(e)).toList();
+    final iconGrades = widget.items.map((e) => _itemIconGrade(e)).toList();
+    final iconOpticalSizes =
+        widget.items.map((e) => _itemIconOpticalSize(e)).toList();
+    final itemsStructureChanged = _listSignature(_lastLabels) !=
+            _listSignature(labels) ||
         _listSignature(_lastSymbols) != _listSignature(symbols) ||
         _listSignature(_lastIconCodePoints) != _listSignature(iconCodePoints) ||
         _listSignature(_lastIconFontFamilies) !=
@@ -295,8 +320,15 @@ class _CNTabBarState extends State<CNTabBar> {
         _listSignature(_lastIconFontPackages) !=
             _listSignature(iconFontPackages) ||
         _listSignature(_lastIconMatchTextDirections) !=
-            _listSignature(iconMatchTextDirections) ||
-        _listSignature(_lastSizes) != _listSignature(sizes)) {
+            _listSignature(iconMatchTextDirections);
+    final itemIconStyleChanged =
+        _listSignature(_lastSizes) != _listSignature(sizes) ||
+            _listSignature(_lastIconFills) != _listSignature(iconFills) ||
+            _listSignature(_lastIconWeights) != _listSignature(iconWeights) ||
+            _listSignature(_lastIconGrades) != _listSignature(iconGrades) ||
+            _listSignature(_lastIconOpticalSizes) !=
+                _listSignature(iconOpticalSizes);
+    if (itemsStructureChanged) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
@@ -304,18 +336,41 @@ class _CNTabBarState extends State<CNTabBar> {
         'iconDataFontFamilies': iconFontFamilies,
         'iconDataFontPackages': iconFontPackages,
         'iconDataMatchTextDirections': iconMatchTextDirections,
+        'iconDataFills': iconFills,
+        'iconDataWeights': iconWeights,
+        'iconDataGrades': iconGrades,
+        'iconDataOpticalSizes': iconOpticalSizes,
         'sfSymbolSizes': sizes,
         'selectedIndex': widget.currentIndex,
       });
-      _lastLabels = labels;
-      _lastSymbols = symbols;
-      _lastIconCodePoints = iconCodePoints;
-      _lastIconFontFamilies = iconFontFamilies;
-      _lastIconFontPackages = iconFontPackages;
-      _lastIconMatchTextDirections = iconMatchTextDirections;
-      _lastSizes = sizes;
+      _cacheItems();
       // Re-measure width in case content changed
       _requestIntrinsicSize();
+    } else if (itemIconStyleChanged) {
+      final itemCount = widget.items.length;
+      for (var i = 0; i < itemCount; i++) {
+        final hasStyleDiff = _listValueAt(_lastSizes, i) !=
+                _listValueAt(sizes, i) ||
+            _listValueAt(_lastIconFills, i) != _listValueAt(iconFills, i) ||
+            _listValueAt(_lastIconWeights, i) != _listValueAt(iconWeights, i) ||
+            _listValueAt(_lastIconGrades, i) != _listValueAt(iconGrades, i) ||
+            _listValueAt(_lastIconOpticalSizes, i) !=
+                _listValueAt(iconOpticalSizes, i);
+        if (!hasStyleDiff) continue;
+        await ch.invokeMethod('setItemIconStyle', {
+          'index': i,
+          'sfSymbolSize': _listValueAt(sizes, i),
+          'iconDataFill': _listValueAt(iconFills, i),
+          'iconDataWeight': _listValueAt(iconWeights, i),
+          'iconDataGrade': _listValueAt(iconGrades, i),
+          'iconDataOpticalSize': _listValueAt(iconOpticalSizes, i),
+        });
+      }
+      _lastSizes = sizes;
+      _lastIconFills = iconFills;
+      _lastIconWeights = iconWeights;
+      _lastIconGrades = iconGrades;
+      _lastIconOpticalSizes = iconOpticalSizes;
     }
 
     // Layout updates (split / insets)
@@ -356,20 +411,30 @@ class _CNTabBarState extends State<CNTabBar> {
     _lastLabels = widget.items.map((e) => e.label ?? '').toList();
     _lastSymbols = widget.items.map((e) => e.icon?.name ?? '').toList();
     _lastIconCodePoints =
-        widget.items.map((e) => e.iconData?.codePoint).toList();
+        widget.items.map((e) => _itemIconData(e)?.codePoint).toList();
     _lastIconFontFamilies =
-        widget.items.map((e) => e.iconData?.fontFamily).toList();
+        widget.items.map((e) => _itemIconData(e)?.fontFamily).toList();
     _lastIconFontPackages =
-        widget.items.map((e) => e.iconData?.fontPackage).toList();
+        widget.items.map((e) => _itemIconData(e)?.fontPackage).toList();
     _lastIconMatchTextDirections = widget.items
-        .map((e) => e.iconData?.matchTextDirection ?? false)
+        .map((e) => _itemIconData(e)?.matchTextDirection ?? false)
         .toList();
     _lastSizes = widget.items.map((e) => _effectiveItemIconSize(e)).toList();
+    _lastIconFills = widget.items.map((e) => _itemIconFill(e)).toList();
+    _lastIconWeights = widget.items.map((e) => _itemIconWeight(e)).toList();
+    _lastIconGrades = widget.items.map((e) => _itemIconGrade(e)).toList();
+    _lastIconOpticalSizes =
+        widget.items.map((e) => _itemIconOpticalSize(e)).toList();
   }
 
   String _listSignature(List<dynamic>? values) {
     if (values == null) return '';
     return values.map((value) => value?.toString() ?? 'null').join('|');
+  }
+
+  T? _listValueAt<T>(List<T?>? values, int index) {
+    if (values == null || index < 0 || index >= values.length) return null;
+    return values[index];
   }
 
   Future<void> _requestIntrinsicSize() async {
