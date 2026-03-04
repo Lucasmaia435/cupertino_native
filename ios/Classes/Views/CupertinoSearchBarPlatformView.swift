@@ -2,6 +2,15 @@ import Flutter
 import UIKit
 import CoreText
 
+private final class LayoutAwareSearchBar: UISearchBar {
+  var onLayout: (() -> Void)?
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    onLayout?()
+  }
+}
+
 class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBarDelegate {
   private struct FlutterFontManifestEntry {
     let family: String
@@ -13,6 +22,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     let iconDataFontFamily: String?
     let iconDataFontPackage: String?
     let iconDataMatchTextDirection: Bool
+    let iconDataColor: UIColor?
     let iconDataSize: CGFloat
     let iconDataFill: CGFloat?
     let iconDataWeight: CGFloat?
@@ -25,12 +35,19 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
 
   private let channel: FlutterMethodChannel
   private let container: UIView
-  private let searchBar: UISearchBar
+  private let searchBar: LayoutAwareSearchBar
+  private let trailingButtons: [UIButton]
+  private var trailingButtonsEnabled: [Bool] = [false, false]
+  private var currentTrailingActions: [TrailingAction] = []
+  private var isInstallingTrailingButtons = false
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
+    let firstTrailingButton = UIButton(type: .system)
+    let secondTrailingButton = UIButton(type: .system)
     self.channel = FlutterMethodChannel(name: "CupertinoNativeSearchBar_\(viewId)", binaryMessenger: messenger)
     self.container = UIView(frame: frame)
-    self.searchBar = UISearchBar(frame: .zero)
+    self.searchBar = LayoutAwareSearchBar(frame: .zero)
+    self.trailingButtons = [firstTrailingButton, secondTrailingButton]
 
     var text: String = ""
     var placeholder: String? = nil
@@ -64,11 +81,23 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     }
 
     searchBar.translatesAutoresizingMaskIntoConstraints = false
+    searchBar.onLayout = { [weak self] in
+      guard let self else { return }
+      self.installTrailingButtonsInTextField()
+    }
     searchBar.delegate = self
     searchBar.searchBarStyle = .minimal
     searchBar.text = text
     searchBar.placeholder = placeholder
     searchBar.showsCancelButton = showsCancelButton
+    for (index, button) in trailingButtons.enumerated() {
+      button.tag = index
+      button.tintColor = tint ?? searchBar.tintColor
+      button.adjustsImageWhenHighlighted = true
+      button.imageView?.contentMode = .scaleAspectFit
+      button.isHidden = true
+      button.addTarget(self, action: #selector(onTrailingPressed(_:)), for: .touchUpInside)
+    }
     applyEnabled(enabled)
     if let color = tint { searchBar.tintColor = color }
     if let color = bg { searchBar.backgroundColor = color }
@@ -82,6 +111,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       searchBar.topAnchor.constraint(equalTo: container.topAnchor),
       searchBar.bottomAnchor.constraint(equalTo: container.bottomAnchor)
     ])
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.applyTrailingActions(self.currentTrailingActions)
+    }
 
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
@@ -123,6 +156,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
         if let params = call.arguments as? [String: Any] {
           if let value = params["tint"] as? NSNumber {
             self.searchBar.tintColor = Self.colorFromARGB(value.intValue)
+            self.applyTrailingActions(self.currentTrailingActions)
           }
           if let value = params["backgroundColor"] as? NSNumber {
             self.searchBar.backgroundColor = Self.colorFromARGB(value.intValue)
@@ -171,12 +205,15 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     searchBar.resignFirstResponder()
   }
 
-  func searchBarBookmarkButtonClicked(_ searchBar: UISearchBar) {
-    channel.invokeMethod("trailingActionPressed", arguments: ["index": 0])
-  }
-
-  func searchBarResultsListButtonClicked(_ searchBar: UISearchBar) {
-    channel.invokeMethod("trailingActionPressed", arguments: ["index": 1])
+  @objc private func onTrailingPressed(_ sender: UIButton) {
+    let index = sender.tag
+    guard index >= 0,
+          index < trailingButtonsEnabled.count,
+          trailingButtonsEnabled[index],
+          searchBar.searchTextField.isEnabled else {
+      return
+    }
+    channel.invokeMethod("trailingActionPressed", arguments: ["index": index])
   }
 
   private static func parseTrailingActions(_ raw: Any?) -> [TrailingAction] {
@@ -191,6 +228,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       let fontPackage = dict["iconDataFontPackage"] as? String
       let matchTextDirection =
         (dict["iconDataMatchTextDirection"] as? NSNumber)?.boolValue ?? false
+      let iconColor = Self.parseOptionalColor(dict["iconDataColor"])
       let size = Self.parseOptionalCGFloat(dict["iconDataSize"]) ?? 16
       actions.append(
         TrailingAction(
@@ -198,6 +236,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
           iconDataFontFamily: fontFamily,
           iconDataFontPackage: fontPackage,
           iconDataMatchTextDirection: matchTextDirection,
+          iconDataColor: iconColor,
           iconDataSize: size,
           iconDataFill: Self.parseOptionalCGFloat(dict["iconDataFill"]),
           iconDataWeight: Self.parseOptionalCGFloat(dict["iconDataWeight"]),
@@ -213,37 +252,101 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     searchBar.isUserInteractionEnabled = enabled
     searchBar.searchTextField.isEnabled = enabled
     searchBar.alpha = enabled ? 1.0 : 0.6
+    for (index, button) in trailingButtons.enumerated() {
+      button.isEnabled = enabled && trailingButtonsEnabled[index]
+      button.alpha = button.isEnabled ? 1.0 : 0.6
+    }
   }
 
   private func applyTrailingActions(_ actions: [TrailingAction]) {
-    applyTrailingAction(actions.count > 0 ? actions[0] : nil, for: .bookmark)
-    applyTrailingAction(actions.count > 1 ? actions[1] : nil, for: .resultsList)
-    searchBar.showsBookmarkButton = actions.count > 0
-    searchBar.showsSearchResultsButton = actions.count > 1
+    currentTrailingActions = Array(actions.prefix(2))
+    for index in 0..<trailingButtons.count {
+      guard index < currentTrailingActions.count,
+            var image = Self.iconImage(
+              codePoint: currentTrailingActions[index].iconDataCodePoint,
+              fontFamily: currentTrailingActions[index].iconDataFontFamily,
+              fontPackage: currentTrailingActions[index].iconDataFontPackage,
+              pointSize: actionIconPointSize(currentTrailingActions[index]),
+              fill: currentTrailingActions[index].iconDataFill,
+              weight: currentTrailingActions[index].iconDataWeight,
+              grade: currentTrailingActions[index].iconDataGrade,
+              opticalSize: currentTrailingActions[index].iconDataOpticalSize
+            ) else {
+        trailingButtons[index].setImage(nil, for: .normal)
+        trailingButtons[index].isHidden = true
+        trailingButtonsEnabled[index] = false
+        continue
+      }
+
+      if currentTrailingActions[index].iconDataMatchTextDirection {
+        image = image.imageFlippedForRightToLeftLayoutDirection()
+      }
+      trailingButtons[index].setImage(image, for: .normal)
+      trailingButtons[index].isHidden = false
+      trailingButtonsEnabled[index] = true
+      trailingButtons[index].tintColor =
+        currentTrailingActions[index].iconDataColor ?? searchBar.tintColor
+    }
+    installTrailingButtonsInTextField()
+    applyEnabled(searchBar.searchTextField.isEnabled)
   }
 
-  private func applyTrailingAction(_ action: TrailingAction?, for icon: UISearchBar.Icon) {
-    guard let action,
-          var image = Self.iconImage(
-            codePoint: action.iconDataCodePoint,
-            fontFamily: action.iconDataFontFamily,
-            fontPackage: action.iconDataFontPackage,
-            pointSize: action.iconDataSize,
-            fill: action.iconDataFill,
-            weight: action.iconDataWeight,
-            grade: action.iconDataGrade,
-            opticalSize: action.iconDataOpticalSize
-          ) else {
-      searchBar.setImage(nil, for: icon, state: .normal)
-      searchBar.setImage(nil, for: icon, state: .highlighted)
+  private func installTrailingButtonsInTextField() {
+    if isInstallingTrailingButtons { return }
+    isInstallingTrailingButtons = true
+    defer { isInstallingTrailingButtons = false }
+
+    let visibleEntries = trailingButtons.enumerated().compactMap { index, button
+      -> (button: UIButton, side: CGFloat)? in
+      guard !button.isHidden, index < currentTrailingActions.count else {
+        return nil
+      }
+      return (button, actionButtonSide(currentTrailingActions[index]))
+    }
+    guard !visibleEntries.isEmpty else {
+      searchBar.searchTextField.rightView = nil
+      searchBar.searchTextField.rightViewMode = .never
       return
     }
 
-    if action.iconDataMatchTextDirection {
-      image = image.imageFlippedForRightToLeftLayoutDirection()
+    let spacing: CGFloat = 0
+    let totalWidth = visibleEntries
+      .map { $0.side }
+      .reduce(CGFloat(0), +)
+    let width = totalWidth + (spacing * CGFloat(max(0, visibleEntries.count - 1)))
+    let containerHeight = visibleEntries
+      .map { $0.side }
+      .reduce(CGFloat(0), max)
+    let container = UIView(frame: CGRect(x: 0, y: 0, width: width, height: containerHeight))
+    var x: CGFloat = 0
+    for entry in visibleEntries {
+      let button = entry.button
+      let side = entry.side
+      button.removeFromSuperview()
+      button.frame = CGRect(
+        x: x,
+        y: (containerHeight - side) / 2.0,
+        width: side,
+        height: side
+      )
+      container.addSubview(button)
+      x += side + spacing
     }
-    searchBar.setImage(image, for: icon, state: .normal)
-    searchBar.setImage(image, for: icon, state: .highlighted)
+    searchBar.searchTextField.rightView = container
+    searchBar.searchTextField.rightViewMode = .always
+  }
+
+  private func actionButtonSide(_ action: TrailingAction) -> CGFloat {
+    let requestedSide = clampedActionIconSize(action) + 2
+    return max(18, min(requestedSide, 130))
+  }
+
+  private func actionIconPointSize(_ action: TrailingAction) -> CGFloat {
+    return clampedActionIconSize(action)
+  }
+
+  private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
+    return min(128, max(12, action.iconDataSize))
   }
 
   private static func iconImage(
@@ -503,6 +606,12 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
   private static func parseOptionalCGFloat(_ value: Any?) -> CGFloat? {
     if value is NSNull { return nil }
     if let number = value as? NSNumber { return CGFloat(truncating: number) }
+    return nil
+  }
+
+  private static func parseOptionalColor(_ value: Any?) -> UIColor? {
+    if value is NSNull { return nil }
+    if let number = value as? NSNumber { return colorFromARGB(number.intValue) }
     return nil
   }
 

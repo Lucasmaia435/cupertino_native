@@ -13,6 +13,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     let iconDataFontFamily: String?
     let iconDataFontPackage: String?
     let iconDataMatchTextDirection: Bool
+    let iconDataColor: NSColor?
     let iconDataSize: CGFloat
     let iconDataFill: CGFloat?
     let iconDataWeight: CGFloat?
@@ -28,7 +29,11 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
   private let trailingButtons: [NSButton]
   private let trailingButtonsStack: NSStackView
   private var searchFieldTrailingConstraint: NSLayoutConstraint!
+  private var trailingButtonWidthConstraints: [NSLayoutConstraint] = []
+  private var trailingButtonHeightConstraints: [NSLayoutConstraint] = []
   private var trailingButtonsEnabled: [Bool] = [false, false]
+  private var currentTrailingActions: [TrailingAction] = []
+  private var currentTint: NSColor? = nil
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let firstTrailingButton = NSButton(title: "", target: nil, action: nil)
@@ -59,6 +64,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       }
       trailingActions = Self.parseTrailingActions(dict["traillingActions"])
     }
+    currentTint = tint
 
     super.init(frame: .zero)
 
@@ -91,7 +97,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     trailingButtonsStack.translatesAutoresizingMaskIntoConstraints = false
     trailingButtonsStack.orientation = .horizontal
     trailingButtonsStack.alignment = .centerY
-    trailingButtonsStack.spacing = 4
+    trailingButtonsStack.spacing = 0
 
     if let color = tint, #available(macOS 10.14, *) {
       for trailingButton in trailingButtons {
@@ -109,6 +115,12 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     addSubview(searchField)
     addSubview(trailingButtonsStack)
     searchFieldTrailingConstraint = searchField.trailingAnchor.constraint(equalTo: trailingAnchor)
+    trailingButtonWidthConstraints = trailingButtons.map {
+      $0.widthAnchor.constraint(equalToConstant: 18)
+    }
+    trailingButtonHeightConstraints = trailingButtons.map {
+      $0.heightAnchor.constraint(equalToConstant: 18)
+    }
     NSLayoutConstraint.activate([
       searchField.leadingAnchor.constraint(equalTo: leadingAnchor),
       searchFieldTrailingConstraint,
@@ -116,14 +128,18 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       searchField.bottomAnchor.constraint(equalTo: bottomAnchor),
       trailingButtonsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
       trailingButtonsStack.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
-      trailingButtons[0].widthAnchor.constraint(equalToConstant: 18),
-      trailingButtons[0].heightAnchor.constraint(equalToConstant: 18),
-      trailingButtons[1].widthAnchor.constraint(equalToConstant: 18),
-      trailingButtons[1].heightAnchor.constraint(equalToConstant: 18)
+      trailingButtonWidthConstraints[0],
+      trailingButtonHeightConstraints[0],
+      trailingButtonWidthConstraints[1],
+      trailingButtonHeightConstraints[1]
     ])
 
     applyTrailingActions(trailingActions)
     applyEnabled(enabled)
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.applyTrailingActions(self.currentTrailingActions)
+    }
 
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
@@ -161,9 +177,8 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       case "setStyle":
         if let params = call.arguments as? [String: Any] {
           if let value = params["tint"] as? NSNumber, #available(macOS 10.14, *) {
-            for trailingButton in self.trailingButtons {
-              trailingButton.contentTintColor = Self.colorFromARGB(value.intValue)
-            }
+            self.currentTint = Self.colorFromARGB(value.intValue)
+            self.applyTrailingActions(self.currentTrailingActions)
           }
           if let value = params["backgroundColor"] as? NSNumber {
             self.layer?.backgroundColor = Self.colorFromARGB(value.intValue).cgColor
@@ -211,6 +226,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       let fontPackage = dict["iconDataFontPackage"] as? String
       let matchTextDirection =
         (dict["iconDataMatchTextDirection"] as? NSNumber)?.boolValue ?? false
+      let iconColor = Self.parseOptionalColor(dict["iconDataColor"])
       let size = Self.parseOptionalCGFloat(dict["iconDataSize"]) ?? 16
       actions.append(
         TrailingAction(
@@ -218,6 +234,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
           iconDataFontFamily: fontFamily,
           iconDataFontPackage: fontPackage,
           iconDataMatchTextDirection: matchTextDirection,
+          iconDataColor: iconColor,
           iconDataSize: size,
           iconDataFill: Self.parseOptionalCGFloat(dict["iconDataFill"]),
           iconDataWeight: Self.parseOptionalCGFloat(dict["iconDataWeight"]),
@@ -254,38 +271,65 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
   }
 
   private func applyTrailingActions(_ actions: [TrailingAction]) {
+    currentTrailingActions = Array(actions.prefix(2))
     for index in 0..<trailingButtons.count {
-      guard index < actions.count,
+      guard index < currentTrailingActions.count,
             let image = Self.iconImage(
-              codePoint: actions[index].iconDataCodePoint,
-              fontFamily: actions[index].iconDataFontFamily,
-              fontPackage: actions[index].iconDataFontPackage,
-              pointSize: actions[index].iconDataSize,
-              fill: actions[index].iconDataFill,
-              weight: actions[index].iconDataWeight,
-              grade: actions[index].iconDataGrade,
-              opticalSize: actions[index].iconDataOpticalSize
+              codePoint: currentTrailingActions[index].iconDataCodePoint,
+              fontFamily: currentTrailingActions[index].iconDataFontFamily,
+              fontPackage: currentTrailingActions[index].iconDataFontPackage,
+              pointSize: actionIconPointSize(currentTrailingActions[index]),
+              fill: currentTrailingActions[index].iconDataFill,
+              weight: currentTrailingActions[index].iconDataWeight,
+              grade: currentTrailingActions[index].iconDataGrade,
+              opticalSize: currentTrailingActions[index].iconDataOpticalSize
             ) else {
         trailingButtons[index].image = nil
         trailingButtons[index].isHidden = true
         trailingButtonsEnabled[index] = false
+        trailingButtonWidthConstraints[index].constant = 0
+        trailingButtonHeightConstraints[index].constant = 0
         continue
       }
-      let _ = actions[index].iconDataMatchTextDirection
+      let _ = currentTrailingActions[index].iconDataMatchTextDirection
       trailingButtons[index].image = image
       trailingButtons[index].isHidden = false
       trailingButtonsEnabled[index] = true
+      let side = actionButtonSide(currentTrailingActions[index])
+      trailingButtonWidthConstraints[index].constant = side
+      trailingButtonHeightConstraints[index].constant = side
+      if #available(macOS 10.14, *) {
+        trailingButtons[index].contentTintColor =
+          currentTrailingActions[index].iconDataColor ?? currentTint
+      }
     }
 
-    let visibleCount = trailingButtons.filter { !$0.isHidden }.count
-    if visibleCount == 0 {
+    let visibleSizes = trailingButtons.enumerated().compactMap { index, button -> CGFloat? in
+      guard !button.isHidden else { return nil }
+      return trailingButtonWidthConstraints[index].constant
+    }
+    if visibleSizes.isEmpty {
       searchFieldTrailingConstraint.constant = 0
     } else {
-      let iconWidth = CGFloat(visibleCount) * 18
-      let spacing = CGFloat(max(0, visibleCount - 1)) * trailingButtonsStack.spacing
+      let iconWidth = visibleSizes.reduce(CGFloat(0), +)
+      let spacing =
+        CGFloat(max(0, visibleSizes.count - 1)) * trailingButtonsStack.spacing
       searchFieldTrailingConstraint.constant = -(iconWidth + spacing + 10)
     }
     applyEnabled(searchField.isEnabled)
+  }
+
+  private func actionButtonSide(_ action: TrailingAction) -> CGFloat {
+    let requestedSide = clampedActionIconSize(action) + 2
+    return max(18, min(requestedSide, 130))
+  }
+
+  private func actionIconPointSize(_ action: TrailingAction) -> CGFloat {
+    return clampedActionIconSize(action)
+  }
+
+  private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
+    return min(128, max(12, action.iconDataSize))
   }
 
   private static func iconImage(
@@ -549,6 +593,12 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
   private static func parseOptionalCGFloat(_ value: Any?) -> CGFloat? {
     if value is NSNull { return nil }
     if let number = value as? NSNumber { return CGFloat(truncating: number) }
+    return nil
+  }
+
+  private static func parseOptionalColor(_ value: Any?) -> NSColor? {
+    if value is NSNull { return nil }
+    if let number = value as? NSNumber { return colorFromARGB(number.intValue) }
     return nil
   }
 

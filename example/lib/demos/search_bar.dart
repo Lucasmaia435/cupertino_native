@@ -35,13 +35,13 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
               showsCancelButton: _showsCancelButton,
               traillingActions: [
                 CNSearchBarAction(
-                  icon: const Icon(Icons.qr_code_scanner, fill: 1),
+                  icon: const Icon(Icons.qr_code_scanner, color: CupertinoColors.black, size: 24),
                   onPressed: () {
                     setState(() => _lastTrailingAction = 'Scanner tapped');
                   },
                 ),
                 CNSearchBarAction(
-                  icon: const Icon(Icons.tune, fill: 1),
+                  icon: const Icon(Icons.abc, size: 48, color: CupertinoColors.black),
                   onPressed: () {
                     setState(() => _lastTrailingAction = 'Filter tapped');
                   },
