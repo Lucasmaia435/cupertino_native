@@ -4,63 +4,6 @@ import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
 
-/// Controller for [CNSearchBar] to perform imperative native actions.
-class CNSearchBarController {
-  MethodChannel? _channel;
-
-  void _attach(MethodChannel channel) {
-    _channel = channel;
-  }
-
-  void _detach() {
-    _channel = null;
-  }
-
-  /// Updates the native text value.
-  Future<void> setText(String text) async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.invokeMethod('setText', {'text': text});
-  }
-
-  /// Updates the native enabled state.
-  Future<void> setEnabled(bool enabled) async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.invokeMethod('setEnabled', {'enabled': enabled});
-  }
-
-  /// Updates the native placeholder text.
-  Future<void> setPlaceholder(String? placeholder) async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.invokeMethod('setPlaceholder', {'placeholder': placeholder});
-  }
-
-  /// Shows or hides the native cancel button (iOS).
-  Future<void> setShowsCancelButton(bool showsCancelButton) async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.invokeMethod('setShowsCancelButton', {
-      'showsCancelButton': showsCancelButton,
-    });
-  }
-
-  /// Requests focus for the native search field.
-  Future<void> focus() async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.invokeMethod('focus');
-  }
-
-  /// Removes focus from the native search field.
-  Future<void> unfocus() async {
-    final channel = _channel;
-    if (channel == null) return;
-    await channel.invokeMethod('unfocus');
-  }
-}
-
 /// Trailing action rendered by the native search bar.
 class CNSearchBarAction {
   /// Creates a trailing action.
@@ -85,10 +28,11 @@ class CNSearchBar extends StatefulWidget {
   /// Creates a Cupertino-native search bar.
   const CNSearchBar({
     super.key,
-    required this.text,
-    required this.onChanged,
+    this.text = '',
+    this.onChanged,
     this.onSubmitted,
     this.onCancelled,
+    this.onTap,
     this.placeholder,
     this.enabled = true,
     this.showsCancelButton = false,
@@ -107,13 +51,16 @@ class CNSearchBar extends StatefulWidget {
   final String text;
 
   /// Called when the text changes due to user interaction.
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String>? onChanged;
 
   /// Called when the user submits the search action.
   final ValueChanged<String>? onSubmitted;
 
   /// Called when the native cancel action is triggered.
   final VoidCallback? onCancelled;
+
+  /// Called when the native field is tapped or receives focus.
+  final VoidCallback? onTap;
 
   /// Optional placeholder string.
   final String? placeholder;
@@ -129,8 +76,8 @@ class CNSearchBar extends StatefulWidget {
   /// Supports up to two actions.
   final List<CNSearchBarAction> traillingActions;
 
-  /// Optional controller for imperative interactions.
-  final CNSearchBarController? controller;
+  /// Optional text controller. When provided, [text] is ignored.
+  final TextEditingController? controller;
 
   /// Visual height of the embedded platform view.
   final double height;
@@ -151,6 +98,8 @@ class CNSearchBar extends StatefulWidget {
 class _CNSearchBarState extends State<CNSearchBar> {
   MethodChannel? _channel;
   late final TextEditingController _fallbackController;
+  TextEditingController? _observedController;
+  bool _isApplyingNativeTextChange = false;
 
   String? _lastText;
   String? _lastPlaceholder;
@@ -163,10 +112,8 @@ class _CNSearchBarState extends State<CNSearchBar> {
   double? _lastHeight;
   String? _lastTraillingActionsSignature;
 
-  CNSearchBarController? _internalController;
-
-  CNSearchBarController get _controller =>
-      widget.controller ?? (_internalController ??= CNSearchBarController());
+  TextEditingController get _textController =>
+      widget.controller ?? _fallbackController;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
 
@@ -182,11 +129,16 @@ class _CNSearchBarState extends State<CNSearchBar> {
   void initState() {
     super.initState();
     _fallbackController = TextEditingController(text: widget.text);
+    _observeController(_textController);
   }
 
   @override
   void didUpdateWidget(covariant CNSearchBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _unobserveController(oldWidget.controller ?? _fallbackController);
+      _observeController(_textController);
+    }
     _syncFallbackControllerIfNeeded();
     _syncPropsToNativeIfNeeded();
   }
@@ -201,7 +153,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
   @override
   void dispose() {
     _channel?.setMethodCallHandler(null);
-    _controller._detach();
+    _unobserveController(_textController);
     _fallbackController.dispose();
     super.dispose();
   }
@@ -213,19 +165,20 @@ class _CNSearchBarState extends State<CNSearchBar> {
       return SizedBox(
         height: _effectiveHeight,
         child: CupertinoSearchTextField(
-          controller: _fallbackController,
+          controller: _textController,
           enabled: widget.enabled,
           placeholder: widget.placeholder,
           onChanged: widget.onChanged,
           onSubmitted: widget.onSubmitted,
           onSuffixTap: widget.onCancelled,
+          onTap: widget.onTap,
         ),
       );
     }
 
     const viewType = 'CupertinoNativeSearchBar';
     final creationParams = <String, dynamic>{
-      'text': widget.text,
+      'text': _textController.text,
       'placeholder': widget.placeholder,
       'enabled': widget.enabled,
       'showsCancelButton': widget.showsCancelButton,
@@ -271,7 +224,6 @@ class _CNSearchBarState extends State<CNSearchBar> {
   void _onPlatformViewCreated(int id) {
     final channel = MethodChannel('CupertinoNativeSearchBar_$id');
     _channel = channel;
-    _controller._attach(channel);
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
     // Force one trailing actions sync after attach; some native paths can
@@ -287,16 +239,20 @@ class _CNSearchBarState extends State<CNSearchBar> {
       case 'textChanged':
         final text = args?['text'] as String?;
         if (text != null) {
-          widget.onChanged(text);
+          _applyNativeText(text);
+          widget.onChanged?.call(text);
           _lastText = text;
         }
         break;
       case 'submitted':
-        final text = (args?['text'] as String?) ?? widget.text;
+        final text = (args?['text'] as String?) ?? _textController.text;
         widget.onSubmitted?.call(text);
         break;
       case 'cancelled':
         widget.onCancelled?.call();
+        break;
+      case 'tapped':
+        widget.onTap?.call();
         break;
       case 'trailingActionPressed':
         final index = (args?['index'] as num?)?.toInt();
@@ -311,7 +267,9 @@ class _CNSearchBarState extends State<CNSearchBar> {
   }
 
   void _syncFallbackControllerIfNeeded() {
-    if (_fallbackController.text == widget.text) return;
+    if (widget.controller != null || _fallbackController.text == widget.text) {
+      return;
+    }
     _fallbackController.value = TextEditingValue(
       text: widget.text,
       selection: TextSelection.collapsed(offset: widget.text.length),
@@ -319,8 +277,46 @@ class _CNSearchBarState extends State<CNSearchBar> {
     );
   }
 
+  void _observeController(TextEditingController controller) {
+    _observedController = controller;
+    controller.addListener(_onTextControllerChanged);
+  }
+
+  void _unobserveController(TextEditingController controller) {
+    controller.removeListener(_onTextControllerChanged);
+    if (_observedController == controller) {
+      _observedController = null;
+    }
+  }
+
+  void _onTextControllerChanged() {
+    if (_isApplyingNativeTextChange) return;
+    _syncTextToNativeIfNeeded();
+  }
+
+  void _applyNativeText(String text) {
+    if (_textController.text == text) return;
+    _isApplyingNativeTextChange = true;
+    _textController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+      composing: TextRange.empty,
+    );
+    _isApplyingNativeTextChange = false;
+  }
+
+  Future<void> _syncTextToNativeIfNeeded() async {
+    final channel = _channel;
+    if (channel == null) return;
+
+    final text = _textController.text;
+    if (_lastText == text) return;
+    await channel.invokeMethod('setText', {'text': text});
+    _lastText = text;
+  }
+
   void _cacheCurrentProps() {
-    _lastText = widget.text;
+    _lastText = _textController.text;
     _lastPlaceholder = widget.placeholder;
     _lastEnabled = widget.enabled;
     _lastShowsCancelButton = widget.showsCancelButton;
@@ -338,7 +334,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
     final channel = _channel;
     if (channel == null) return;
 
-    final text = widget.text;
+    final text = _textController.text;
     final placeholder = widget.placeholder;
     final enabled = widget.enabled;
     final showsCancelButton = widget.showsCancelButton;

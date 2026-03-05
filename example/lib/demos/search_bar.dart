@@ -10,13 +10,22 @@ class SearchBarDemoPage extends StatefulWidget {
 }
 
 class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
-  final CNSearchBarController _controller = CNSearchBarController();
-  String _query = '';
-  String _coloredQuery = 'Cupertino';
+  final TextEditingController _queryController = TextEditingController();
+  final TextEditingController _coloredController = TextEditingController(
+    text: 'Cupertino',
+  );
   String _lastSubmitted = 'None';
   String _lastTrailingAction = 'None';
+  String _lastTap = 'None';
   bool _enabled = true;
   bool _showsCancelButton = true;
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    _coloredController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,81 +38,101 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
             const Text('Default'),
             const SizedBox(height: 8),
             CNSearchBar(
-              text: _query,
+              controller: _queryController,
               placeholder: 'Search',
               enabled: _enabled,
               showsCancelButton: _showsCancelButton,
               traillingActions: [
                 CNSearchBarAction(
-                  icon: const Icon(Icons.qr_code_scanner, color: CupertinoColors.black, size: 24),
+                  icon: const Icon(Icons.qr_code_scanner,
+                      color: CupertinoColors.black, size: 24),
                   onPressed: () {
                     setState(() => _lastTrailingAction = 'Scanner tapped');
                   },
                 ),
                 CNSearchBarAction(
-                  icon: const Icon(Icons.abc, size: 48, color: CupertinoColors.black),
+                  icon: const Icon(Icons.abc,
+                      size: 48, color: CupertinoColors.black),
                   onPressed: () {
                     setState(() => _lastTrailingAction = 'Filter tapped');
                   },
                 ),
               ],
-              controller: _controller,
-              onChanged: (value) => setState(() => _query = value),
-              onSubmitted: (value) => setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value),
+              onChanged: (_) => setState(() {}),
+              onTap: () => setState(() => _lastTap = 'Tapped'),
+              onSubmitted: (value) => setState(
+                  () => _lastSubmitted = value.isEmpty ? 'Empty' : value),
               onCancelled: () {
                 setState(() {
-                  _query = '';
+                  _queryController.clear();
                   _lastSubmitted = 'Cancelled';
                 });
               },
             ),
             const SizedBox(height: 8),
-            Text('Current text: ${_query.isEmpty ? 'Empty' : _query}'),
+            Text(
+              'Current text: ${_queryController.text.isEmpty ? 'Empty' : _queryController.text}',
+            ),
             Text('Last submitted: $_lastSubmitted'),
             Text('Trailing action: $_lastTrailingAction'),
+            Text('Last tap: $_lastTap'),
             const SizedBox(height: 24),
             Row(
               children: [
                 const Text('Enabled'),
                 const Spacer(),
-                CupertinoSwitch(value: _enabled, onChanged: (value) => setState(() => _enabled = value)),
+                CupertinoSwitch(
+                    value: _enabled,
+                    onChanged: (value) => setState(() => _enabled = value)),
               ],
             ),
             Row(
               children: [
                 const Text('Show cancel button'),
                 const Spacer(),
-                CupertinoSwitch(value: _showsCancelButton, onChanged: (value) => setState(() => _showsCancelButton = value)),
+                CupertinoSwitch(
+                    value: _showsCancelButton,
+                    onChanged: (value) =>
+                        setState(() => _showsCancelButton = value)),
               ],
             ),
             const SizedBox(height: 24),
             const Text('Tinted'),
             const SizedBox(height: 8),
             CNSearchBar(
-              text: _coloredQuery,
+              controller: _coloredController,
               placeholder: 'Search components',
               tint: CupertinoColors.systemPink,
               fieldBackgroundColor: CupertinoColors.systemGrey5,
-              onChanged: (value) => setState(() => _coloredQuery = value),
-              onSubmitted: (value) => setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (value) => setState(
+                  () => _lastSubmitted = value.isEmpty ? 'Empty' : value),
             ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                CNButton(label: 'Focus', style: CNButtonStyle.gray, shrinkWrap: true, onPressed: () => _controller.focus()),
-                CNButton(label: 'Unfocus', style: CNButtonStyle.gray, shrinkWrap: true, onPressed: () => _controller.unfocus()),
+                CNButton(
+                  label: 'Set Cupertino',
+                  style: CNButtonStyle.gray,
+                  shrinkWrap: true,
+                  onPressed: () {
+                    setState(() {
+                      _queryController.text = 'Cupertino';
+                      _lastSubmitted = 'None';
+                    });
+                  },
+                ),
                 CNButton(
                   label: 'Clear',
                   style: CNButtonStyle.gray,
                   shrinkWrap: true,
                   onPressed: () {
                     setState(() {
-                      _query = '';
+                      _queryController.clear();
                       _lastSubmitted = 'None';
                     });
-                    _controller.setText('');
                   },
                 ),
               ],
