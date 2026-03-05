@@ -518,18 +518,57 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
   }
 
   private static func ensureFlutterFontRegistered(family: String, package: String?) {
+    let assets = fontAssetsForFamily(family: family, package: package)
+    guard !assets.isEmpty else { return }
+    registerFontAssets(assets)
+  }
+
+  private static func fontAssetsForFamily(family: String, package: String?) -> [String] {
     let manifest = loadFontManifest()
-    guard !manifest.isEmpty else { return }
-    let candidates = [
-      family,
-      package != nil ? "packages/\(package!)/\(family)" : nil
-    ].compactMap { $0 }
-    for candidate in candidates {
-      let entries = manifest.filter { $0.family == candidate }
-      for entry in entries {
-        registerFontAssets(entry.assets)
+    guard !manifest.isEmpty else { return [] }
+
+    let candidates = manifestFontNameCandidates(family: family, package: package)
+    let candidateSet = Set(candidates)
+    let normalizedCandidates = Set(candidates.map { normalizedFontToken($0) })
+
+    var assets: [String] = []
+    for entry in manifest {
+      if candidateSet.contains(entry.family) ||
+          normalizedCandidates.contains(normalizedFontToken(entry.family)) {
+        assets.append(contentsOf: entry.assets)
       }
     }
+    return Array(Set(assets))
+  }
+
+  private static func manifestFontNameCandidates(
+    family: String,
+    package: String?
+  ) -> [String] {
+    var candidates: [String] = [family]
+    if let package {
+      candidates.append("packages/\(package)/\(family)")
+    }
+
+    if family.hasPrefix("packages/"),
+       let lastComponent = family.split(separator: "/").last,
+       !lastComponent.isEmpty {
+      candidates.append(String(lastComponent))
+    }
+
+    let withSpaces = family.replacingOccurrences(of: "_", with: " ")
+    let withoutSpaces = family.replacingOccurrences(of: " ", with: "")
+    let withoutUnderscores = family.replacingOccurrences(of: "_", with: "")
+    candidates.append(withSpaces)
+    candidates.append(withoutSpaces)
+    candidates.append(withoutUnderscores)
+
+    if let package {
+      candidates.append("packages/\(package)/\(withSpaces)")
+      candidates.append("packages/\(package)/\(withoutSpaces)")
+      candidates.append("packages/\(package)/\(withoutUnderscores)")
+    }
+    return Array(Set(candidates))
   }
 
   private static func registerFontAssets(_ assets: [String]) {
