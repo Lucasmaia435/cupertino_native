@@ -527,18 +527,52 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     let manifest = loadFontManifest()
     guard !manifest.isEmpty else { return [] }
 
-    let candidates = manifestFontNameCandidates(family: family, package: package)
-    let candidateSet = Set(candidates)
-    let normalizedCandidates = Set(candidates.map { normalizedFontToken($0) })
-
-    var assets: [String] = []
+    let exactCandidates = manifestFontNameCandidates(
+      family: family,
+      package: package
+    )
+    var exactAssets: [String] = []
     for entry in manifest {
-      if candidateSet.contains(entry.family) ||
-          normalizedCandidates.contains(normalizedFontToken(entry.family)) {
-        assets.append(contentsOf: entry.assets)
+      if exactCandidates.contains(entry.family) {
+        exactAssets.append(contentsOf: entry.assets)
       }
     }
-    return Array(Set(assets))
+    if !exactAssets.isEmpty {
+      return Array(Set(exactAssets))
+    }
+
+    let normalizedCandidates = Set(
+      manifestFontNameCandidates(family: family, package: package)
+        .map { normalizedFontToken($0) }
+    )
+
+    var scopedFallbackAssets: [String] = []
+    for entry in manifest {
+      // If package is provided, avoid app-level fonts with same family.
+      if let package {
+        let packagePrefix = "packages/\(package)/"
+        if !entry.family.hasPrefix(packagePrefix) { continue }
+      } else if entry.family.hasPrefix("packages/") {
+        // If package is not provided, prefer app-level font families.
+        continue
+      }
+
+      if normalizedCandidates.contains(normalizedFontToken(entry.family)) {
+        scopedFallbackAssets.append(contentsOf: entry.assets)
+      }
+    }
+    if !scopedFallbackAssets.isEmpty {
+      return Array(Set(scopedFallbackAssets))
+    }
+
+    // Last resort for compatibility: any normalized match.
+    var fallbackAssets: [String] = []
+    for entry in manifest {
+      if normalizedCandidates.contains(normalizedFontToken(entry.family)) {
+        fallbackAssets.append(contentsOf: entry.assets)
+      }
+    }
+    return Array(Set(fallbackAssets))
   }
 
   private static func manifestFontNameCandidates(
