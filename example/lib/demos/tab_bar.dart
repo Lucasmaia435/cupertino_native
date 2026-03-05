@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Icons, TabBarView, TabController;
+import 'package:flutter/material.dart' show Icons, TabController, TabBarView;
 import 'package:cupertino_native/cupertino_native.dart';
 
 class TabBarDemoPage extends StatefulWidget {
@@ -9,7 +9,8 @@ class TabBarDemoPage extends StatefulWidget {
   State<TabBarDemoPage> createState() => _TabBarDemoPageState();
 }
 
-class _TabBarDemoPageState extends State<TabBarDemoPage> with SingleTickerProviderStateMixin {
+class _TabBarDemoPageState extends State<TabBarDemoPage>
+    with SingleTickerProviderStateMixin {
   late final TabController _controller;
   int _index = 0;
 
@@ -32,7 +33,9 @@ class _TabBarDemoPageState extends State<TabBarDemoPage> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(middle: Text('Native Tab Bar')),
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text('Native Tab Bar'),
+      ),
       child: Stack(
         children: [
           // Content below
@@ -53,13 +56,42 @@ class _TabBarDemoPageState extends State<TabBarDemoPage> with SingleTickerProvid
             child: CNTabBar(
               iconSize: 24,
               items: [
-                CNTabBarItem(label: 'Dashboard', iconData: Icons.house_outlined, iconDataSize: 48),
-                CNTabBarItem(label: 'Journal', iconData: Icons.book_outlined),
-                CNTabBarItem(label: 'Goals', iconData: Icons.flag_outlined),
-                CNTabBarItem(iconData: Icons.more_horiz_outlined, label: 'More'),
+                CNTabBarItem(
+                  label: 'Home',
+                  flutterIcon: Icon(
+                    Icons.home_outlined,
+                    fill: _index == 0 ? 1 : 0,
+                    size: 24,
+                  ),
+                ),
+                CNTabBarItem(
+                  label: 'Profile',
+                  flutterIcon: Icon(
+                    Icons.person_outline,
+                    fill: _index == 1 ? 1 : 0,
+                    size: 24,
+                  ),
+                ),
+                CNTabBarItem(
+                  label: 'Settings',
+                  flutterIcon: Icon(
+                    Icons.settings_outlined,
+                    fill: _index == 2 ? 1 : 0,
+                    size: 24,
+                  ),
+                ),
+                CNTabBarItem(
+                  label: 'Search',
+                  flutterIcon: Icon(
+                    Icons.search_outlined,
+                    fill: _index == 3 ? 1 : 0,
+                    size: 24,
+                  ),
+                ),
               ],
               currentIndex: _index,
-              rightCount: 0,
+              split: true,
+              rightCount: 1,
               shrinkCentered: true,
               onTap: (i) {
                 setState(() => _index = i);
@@ -88,9 +120,18 @@ class _ImageTabPage extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: CupertinoColors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: CupertinoColors.black.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.only(top: 12),
-            child: Text(label, style: const TextStyle(fontSize: 18, color: CupertinoColors.white)),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 18,
+                color: CupertinoColors.white,
+              ),
+            ),
           ),
         ),
       ],
