@@ -160,6 +160,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
   int? _lastTint;
   int? _lastBackground;
   int? _lastFieldBackground;
+  double? _lastHeight;
   String? _lastTraillingActionsSignature;
 
   CNSearchBarController? _internalController;
@@ -171,6 +172,11 @@ class _CNSearchBarState extends State<CNSearchBar> {
 
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
+
+  double get _effectiveHeight {
+    final min = defaultTargetPlatform == TargetPlatform.macOS ? 24.0 : 32.0;
+    return widget.height.clamp(min, 240.0);
+  }
 
   @override
   void initState() {
@@ -205,7 +211,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
     if (!(defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS)) {
       return SizedBox(
-        height: widget.height,
+        height: _effectiveHeight,
         child: CupertinoSearchTextField(
           controller: _fallbackController,
           enabled: widget.enabled,
@@ -223,6 +229,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
       'placeholder': widget.placeholder,
       'enabled': widget.enabled,
       'showsCancelButton': widget.showsCancelButton,
+      'height': _effectiveHeight,
       'traillingActions': _encodeTraillingActions(widget.traillingActions),
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
@@ -240,7 +247,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
 
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return SizedBox(
-        height: widget.height,
+        height: _effectiveHeight,
         child: UiKitView(
           viewType: viewType,
           creationParamsCodec: const StandardMessageCodec(),
@@ -251,7 +258,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
     }
 
     return SizedBox(
-      height: widget.height,
+      height: _effectiveHeight,
       child: AppKitView(
         viewType: viewType,
         creationParamsCodec: const StandardMessageCodec(),
@@ -322,6 +329,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
     _lastFieldBackground =
         resolveColorToArgb(widget.fieldBackgroundColor, context);
+    _lastHeight = _effectiveHeight;
     _lastTraillingActionsSignature =
         _traillingActionsSignature(widget.traillingActions);
   }
@@ -334,6 +342,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
     final placeholder = widget.placeholder;
     final enabled = widget.enabled;
     final showsCancelButton = widget.showsCancelButton;
+    final height = _effectiveHeight;
     final tint = resolveColorToArgb(_effectiveTint, context);
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
@@ -362,6 +371,11 @@ class _CNSearchBarState extends State<CNSearchBar> {
         'showsCancelButton': showsCancelButton,
       });
       _lastShowsCancelButton = showsCancelButton;
+    }
+
+    if (_lastHeight != height) {
+      await channel.invokeMethod('setHeight', {'height': height});
+      _lastHeight = height;
     }
 
     if (_lastTraillingActionsSignature != traillingActionsSignature) {

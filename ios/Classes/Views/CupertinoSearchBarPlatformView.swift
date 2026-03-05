@@ -40,6 +40,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
   private var trailingButtonsEnabled: [Bool] = [false, false]
   private var currentTrailingActions: [TrailingAction] = []
   private var isInstallingTrailingButtons = false
+  private var requestedHeight: CGFloat = 56
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let firstTrailingButton = UIButton(type: .system)
@@ -53,6 +54,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     var placeholder: String? = nil
     var enabled: Bool = true
     var showsCancelButton: Bool = false
+    var height: CGFloat = 56
     var isDark: Bool = false
     var tint: UIColor? = nil
     var bg: UIColor? = nil
@@ -64,6 +66,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       if let value = dict["placeholder"] as? String { placeholder = value }
       if let value = dict["enabled"] as? NSNumber { enabled = value.boolValue }
       if let value = dict["showsCancelButton"] as? NSNumber { showsCancelButton = value.boolValue }
+      if let value = dict["height"] as? NSNumber { height = CGFloat(truncating: value) }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let style = dict["style"] as? [String: Any] {
         if let value = style["tint"] as? NSNumber { tint = Self.colorFromARGB(value.intValue) }
@@ -83,6 +86,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     searchBar.translatesAutoresizingMaskIntoConstraints = false
     searchBar.onLayout = { [weak self] in
       guard let self else { return }
+      self.updateTextFieldAppearanceForHeight()
       self.installTrailingButtonsInTextField()
     }
     searchBar.delegate = self
@@ -90,6 +94,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     searchBar.text = text
     searchBar.placeholder = placeholder
     searchBar.showsCancelButton = showsCancelButton
+    requestedHeight = max(32, min(height, 240))
     for (index, button) in trailingButtons.enumerated() {
       button.tag = index
       button.tintColor = tint ?? searchBar.tintColor
@@ -102,6 +107,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     if let color = tint { searchBar.tintColor = color }
     if let color = bg { searchBar.backgroundColor = color }
     if let color = fieldBg { searchBar.searchTextField.backgroundColor = color }
+    applyHeight(height)
     applyTrailingActions(trailingActions)
 
     container.addSubview(searchBar)
@@ -122,7 +128,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       case "getIntrinsicSize":
         let width = max(self.container.bounds.width, 320)
         let size = self.searchBar.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        result(["width": Double(size.width), "height": Double(size.height)])
+        result(["width": Double(size.width), "height": Double(self.requestedHeight)])
       case "setText":
         if let params = call.arguments as? [String: Any], let value = params["text"] as? String {
           self.searchBar.text = value
@@ -147,6 +153,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
           self.searchBar.setShowsCancelButton(value, animated: true)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing showsCancelButton", details: nil)) }
+      case "setHeight":
+        if let params = call.arguments as? [String: Any], let value = params["height"] as? NSNumber {
+          self.applyHeight(CGFloat(truncating: value))
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing height", details: nil)) }
       case "setTrailingActions":
         if let params = call.arguments as? [String: Any] {
           self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
@@ -256,6 +267,31 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       button.isEnabled = enabled && trailingButtonsEnabled[index]
       button.alpha = button.isEnabled ? 1.0 : 0.6
     }
+  }
+
+  private func applyHeight(_ height: CGFloat) {
+    requestedHeight = max(32, min(height, 240))
+    searchBar.setNeedsLayout()
+    searchBar.layoutIfNeeded()
+    updateTextFieldAppearanceForHeight()
+    installTrailingButtonsInTextField()
+  }
+
+  private func updateTextFieldAppearanceForHeight() {
+    let textField = searchBar.searchTextField
+    let textFieldHeight = max(28, min(requestedHeight - 14, 120))
+
+    if textField.bounds.height > 0 {
+      var frame = textField.frame
+      frame.size.height = textFieldHeight
+      frame.origin.y = (searchBar.bounds.height - textFieldHeight) / 2.0
+      textField.frame = frame.integral
+    }
+
+    let fontSize = max(12, min(24, textFieldHeight * 0.45))
+    textField.font = UIFont.systemFont(ofSize: fontSize)
+    textField.layer.cornerRadius = textFieldHeight / 2.0
+    textField.layer.masksToBounds = true
   }
 
   private func applyTrailingActions(_ actions: [TrailingAction]) {

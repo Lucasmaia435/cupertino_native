@@ -34,6 +34,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
   private var trailingButtonsEnabled: [Bool] = [false, false]
   private var currentTrailingActions: [TrailingAction] = []
   private var currentTint: NSColor? = nil
+  private var requestedHeight: CGFloat = 56
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let firstTrailingButton = NSButton(title: "", target: nil, action: nil)
@@ -46,6 +47,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     var text: String = ""
     var placeholder: String? = nil
     var enabled: Bool = true
+    var height: CGFloat = 56
     var isDark: Bool = false
     var tint: NSColor? = nil
     var bg: NSColor? = nil
@@ -56,6 +58,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       if let value = dict["text"] as? String { text = value }
       if let value = dict["placeholder"] as? String { placeholder = value }
       if let value = dict["enabled"] as? NSNumber { enabled = value.boolValue }
+      if let value = dict["height"] as? NSNumber { height = CGFloat(truncating: value) }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let style = dict["style"] as? [String: Any] {
         if let value = style["tint"] as? NSNumber { tint = Self.colorFromARGB(value.intValue) }
@@ -80,6 +83,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     searchField.stringValue = text
     searchField.placeholderString = placeholder
     searchField.isEnabled = enabled
+    requestedHeight = max(24, min(height, 240))
 
     for (index, trailingButton) in trailingButtons.enumerated() {
       trailingButton.translatesAutoresizingMaskIntoConstraints = false
@@ -111,6 +115,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     if let color = bg {
       layer?.backgroundColor = color.cgColor
     }
+    applyHeight(height)
 
     addSubview(searchField)
     addSubview(trailingButtonsStack)
@@ -146,7 +151,7 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       switch call.method {
       case "getIntrinsicSize":
         let size = self.searchField.intrinsicContentSize
-        result(["width": Double(size.width), "height": Double(size.height)])
+        result(["width": Double(size.width), "height": Double(self.requestedHeight)])
       case "setText":
         if let params = call.arguments as? [String: Any], let value = params["text"] as? String {
           self.searchField.stringValue = value
@@ -169,6 +174,11 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       case "setShowsCancelButton":
         // NSSearchField controls cancel affordance automatically based on text.
         result(nil)
+      case "setHeight":
+        if let params = call.arguments as? [String: Any], let value = params["height"] as? NSNumber {
+          self.applyHeight(CGFloat(truncating: value))
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing height", details: nil)) }
       case "setTrailingActions":
         if let params = call.arguments as? [String: Any] {
           self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
@@ -268,6 +278,20 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
       trailingButton.isEnabled = enabled && trailingButtonsEnabled[index]
       trailingButton.alphaValue = trailingButton.isEnabled ? 1.0 : 0.6
     }
+  }
+
+  private func applyHeight(_ height: CGFloat) {
+    requestedHeight = max(24, min(height, 240))
+    let fontSize = max(12, min(24, requestedHeight * 0.42))
+    let fieldFont = NSFont.systemFont(ofSize: fontSize)
+    searchField.font = fieldFont
+    if let cell = searchField.cell as? NSSearchFieldCell {
+      cell.font = fieldFont
+      cell.controlSize = requestedHeight < 30 ? .small : .regular
+    }
+    searchField.invalidateIntrinsicContentSize()
+    needsLayout = true
+    layoutSubtreeIfNeeded()
   }
 
   private func applyTrailingActions(_ actions: [TrailingAction]) {
