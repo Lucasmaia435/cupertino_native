@@ -204,6 +204,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     channel.invokeMethod("textChanged", arguments: ["text": searchText])
   }
 
+  func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
+    channel.invokeMethod("tapped", arguments: nil)
+  }
+
   func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
     channel.invokeMethod("submitted", arguments: ["text": searchBar.text ?? ""])
     searchBar.resignFirstResponder()

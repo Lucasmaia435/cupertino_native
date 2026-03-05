@@ -224,6 +224,10 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
     channel.invokeMethod("textChanged", arguments: ["text": searchField.stringValue])
   }
 
+  func controlTextDidBeginEditing(_ obj: Notification) {
+    channel.invokeMethod("tapped", arguments: nil)
+  }
+
   private static func parseTrailingActions(_ raw: Any?) -> [TrailingAction] {
     guard let items = raw as? [Any] else { return [] }
     var actions: [TrailingAction] = []
