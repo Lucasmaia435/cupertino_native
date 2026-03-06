@@ -567,6 +567,10 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     return UIColor(red: r, green: g, blue: b, alpha: a)
   }
 
+  private static func materializedBackgroundColor(_ color: UIColor) -> UIColor {
+    color.withAlphaComponent(min(color.cgColor.alpha, 0.78))
+  }
+
   private func applyButtonStyle(buttonStyle: String, round: Bool) {
     if #available(iOS 15.0, *) {
       // Preserve current content while swapping configurations
@@ -611,8 +615,13 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         }
       }
       if let backgroundColor = currentBackgroundColor {
-        config.baseBackgroundColor = backgroundColor
-        config.background.backgroundColor = backgroundColor
+        let materialBackground = Self.materializedBackgroundColor(backgroundColor)
+        config.baseBackgroundColor = materialBackground
+        config.background.backgroundColor = materialBackground
+        if buttonStyle != "glass" && buttonStyle != "prominentGlass" {
+          // Match the softer native bar/chrome treatment instead of a fully solid fill.
+          config.background.visualEffect = UIBlurEffect(style: .systemChromeMaterial)
+        }
       }
       // Restore content after style swap
       config.title = currentTitle
@@ -622,7 +631,11 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     } else {
       button.layer.cornerRadius = round ? 999 : 8
       button.clipsToBounds = true
-      button.backgroundColor = currentBackgroundColor ?? .clear
+      if let backgroundColor = currentBackgroundColor {
+        button.backgroundColor = Self.materializedBackgroundColor(backgroundColor)
+      } else {
+        button.backgroundColor = .clear
+      }
       button.layer.borderWidth = 0
     }
   }
