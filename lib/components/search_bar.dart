@@ -3,14 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 
 /// Trailing action rendered by the native search bar.
 class CNSearchBarAction {
   /// Creates a trailing action.
-  const CNSearchBarAction({
-    required this.icon,
-    required this.onPressed,
-  });
+  const CNSearchBarAction({required this.icon, required this.onPressed});
 
   /// Icon rendered natively.
   final Icon icon;
@@ -43,9 +41,9 @@ class CNSearchBar extends StatefulWidget {
     this.backgroundColor,
     this.fieldBackgroundColor,
   }) : assert(
-          traillingActions.length <= 2,
-          'CNSearchBar supports at most two traillingActions.',
-        );
+         traillingActions.length <= 2,
+         'CNSearchBar supports at most two traillingActions.',
+       );
 
   /// Current text displayed by the search field.
   final String text;
@@ -95,7 +93,8 @@ class CNSearchBar extends StatefulWidget {
   State<CNSearchBar> createState() => _CNSearchBarState();
 }
 
-class _CNSearchBarState extends State<CNSearchBar> {
+class _CNSearchBarState extends State<CNSearchBar>
+    with CNPlatformViewModalVisibility<CNSearchBar> {
   MethodChannel? _channel;
   late final TextEditingController _fallbackController;
   TextEditingController? _observedController;
@@ -119,6 +118,9 @@ class _CNSearchBarState extends State<CNSearchBar> {
 
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   double get _effectiveHeight {
     final min = defaultTargetPlatform == TargetPlatform.macOS ? 24.0 : 32.0;
@@ -176,6 +178,8 @@ class _CNSearchBarState extends State<CNSearchBar> {
       );
     }
 
+    trackPlatformViewModalVisibility();
+
     const viewType = 'CupertinoNativeSearchBar';
     final creationParams = <String, dynamic>{
       'text': _textController.text,
@@ -188,8 +192,10 @@ class _CNSearchBarState extends State<CNSearchBar> {
       'style': encodeStyle(context, tint: _effectiveTint)
         ..addAll({
           if (widget.backgroundColor != null)
-            'backgroundColor':
-                resolveColorToArgb(widget.backgroundColor, context),
+            'backgroundColor': resolveColorToArgb(
+              widget.backgroundColor,
+              context,
+            ),
           if (widget.fieldBackgroundColor != null)
             'fieldBackgroundColor': resolveColorToArgb(
               widget.fieldBackgroundColor,
@@ -226,6 +232,7 @@ class _CNSearchBarState extends State<CNSearchBar> {
     _channel = channel;
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    syncPlatformViewModalVisibility();
     // Force one trailing actions sync after attach; some native paths can
     // ignore creation params during first layout pass.
     _lastTraillingActionsSignature = null;
@@ -323,11 +330,14 @@ class _CNSearchBarState extends State<CNSearchBar> {
     _lastIsDark = _isDark;
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
-    _lastFieldBackground =
-        resolveColorToArgb(widget.fieldBackgroundColor, context);
+    _lastFieldBackground = resolveColorToArgb(
+      widget.fieldBackgroundColor,
+      context,
+    );
     _lastHeight = _effectiveHeight;
-    _lastTraillingActionsSignature =
-        _traillingActionsSignature(widget.traillingActions);
+    _lastTraillingActionsSignature = _traillingActionsSignature(
+      widget.traillingActions,
+    );
   }
 
   Future<void> _syncPropsToNativeIfNeeded() async {
@@ -343,8 +353,9 @@ class _CNSearchBarState extends State<CNSearchBar> {
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
     final traillingActions = widget.traillingActions;
-    final traillingActionsSignature =
-        _traillingActionsSignature(traillingActions);
+    final traillingActionsSignature = _traillingActionsSignature(
+      traillingActions,
+    );
 
     if (_lastText != text) {
       await channel.invokeMethod('setText', {'text': text});
@@ -352,8 +363,9 @@ class _CNSearchBarState extends State<CNSearchBar> {
     }
 
     if (_lastPlaceholder != placeholder) {
-      await channel
-          .invokeMethod('setPlaceholder', {'placeholder': placeholder});
+      await channel.invokeMethod('setPlaceholder', {
+        'placeholder': placeholder,
+      });
       _lastPlaceholder = placeholder;
     }
 
@@ -402,41 +414,47 @@ class _CNSearchBarState extends State<CNSearchBar> {
   List<Map<String, dynamic>> _encodeTraillingActions(
     List<CNSearchBarAction> actions,
   ) {
-    return actions.take(2).map((action) {
-      final icon = action.icon;
-      final iconData = icon.icon;
-      return <String, dynamic>{
-        'iconDataCodePoint': iconData?.codePoint,
-        'iconDataFontFamily': iconData?.fontFamily,
-        'iconDataFontPackage': iconData?.fontPackage,
-        'iconDataMatchTextDirection': iconData?.matchTextDirection ?? false,
-        'iconDataColor': resolveColorToArgb(icon.color, context),
-        'iconDataSize': icon.size,
-        'iconDataFill': icon.fill,
-        'iconDataWeight': icon.weight,
-        'iconDataGrade': icon.grade,
-        'iconDataOpticalSize': icon.opticalSize,
-      };
-    }).toList(growable: false);
+    return actions
+        .take(2)
+        .map((action) {
+          final icon = action.icon;
+          final iconData = icon.icon;
+          return <String, dynamic>{
+            'iconDataCodePoint': iconData?.codePoint,
+            'iconDataFontFamily': iconData?.fontFamily,
+            'iconDataFontPackage': iconData?.fontPackage,
+            'iconDataMatchTextDirection': iconData?.matchTextDirection ?? false,
+            'iconDataColor': resolveColorToArgb(icon.color, context),
+            'iconDataSize': icon.size,
+            'iconDataFill': icon.fill,
+            'iconDataWeight': icon.weight,
+            'iconDataGrade': icon.grade,
+            'iconDataOpticalSize': icon.opticalSize,
+          };
+        })
+        .toList(growable: false);
   }
 
   String _traillingActionsSignature(List<CNSearchBarAction> actions) {
-    return actions.take(2).map((action) {
-      final icon = action.icon;
-      final iconData = icon.icon;
-      return [
-        iconData?.codePoint,
-        iconData?.fontFamily,
-        iconData?.fontPackage,
-        iconData?.matchTextDirection,
-        resolveColorToArgb(icon.color, context),
-        icon.size,
-        icon.fill,
-        icon.weight,
-        icon.grade,
-        icon.opticalSize,
-      ].map((value) => value?.toString() ?? 'null').join('|');
-    }).join('||');
+    return actions
+        .take(2)
+        .map((action) {
+          final icon = action.icon;
+          final iconData = icon.icon;
+          return [
+            iconData?.codePoint,
+            iconData?.fontFamily,
+            iconData?.fontPackage,
+            iconData?.matchTextDirection,
+            resolveColorToArgb(icon.color, context),
+            icon.size,
+            icon.fill,
+            icon.weight,
+            icon.grade,
+            icon.opticalSize,
+          ].map((value) => value?.toString() ?? 'null').join('|');
+        })
+        .join('||');
   }
 
   Future<void> _syncBrightnessIfNeeded() async {

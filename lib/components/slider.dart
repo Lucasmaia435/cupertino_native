@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 
 /// Controller for a [CNSlider] allowing imperative changes to the native
 /// NSSlider/UISlider instance.
@@ -105,7 +106,8 @@ class CNSlider extends StatefulWidget {
   State<CNSlider> createState() => _CNSliderState();
 }
 
-class _CNSliderState extends State<CNSlider> {
+class _CNSliderState extends State<CNSlider>
+    with CNPlatformViewModalVisibility<CNSlider> {
   MethodChannel? _channel;
 
   double? _lastValue;
@@ -134,6 +136,9 @@ class _CNSliderState extends State<CNSlider> {
       CupertinoTheme.of(context).primaryColor;
   Color? get _effectiveThumbTint => widget.thumbColor;
   Color? get _effectiveTrackBgTint => widget.trackBackgroundColor;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void dispose() {
@@ -171,6 +176,8 @@ class _CNSliderState extends State<CNSlider> {
         ),
       );
     }
+
+    trackPlatformViewModalVisibility();
 
     const viewType = 'CupertinoNativeSlider';
     final creationParams = <String, dynamic>{
@@ -237,6 +244,7 @@ class _CNSliderState extends State<CNSlider> {
     _controller._attach(channel);
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    syncPlatformViewModalVisibility();
     _syncBrightnessIfNeeded();
   }
 

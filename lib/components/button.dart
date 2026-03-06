@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 import '../style/button_style.dart';
 
@@ -23,10 +24,10 @@ class CNButton extends StatefulWidget {
     this.height = 32.0,
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
-  })  : icon = null,
-        flutterIcon = null,
-        width = null,
-        round = false;
+  }) : icon = null,
+       flutterIcon = null,
+       width = null,
+       round = false;
 
   /// Creates a round, icon-only variant of [CNButton].
   const CNButton.icon({
@@ -39,20 +40,20 @@ class CNButton extends StatefulWidget {
     this.backgroundColor,
     double size = 44.0,
     this.style = CNButtonStyle.glass,
-  })  : assert(
-          icon == null || flutterIcon == null,
-          'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
-        ),
-        assert(
-          icon != null || flutterIcon != null,
-          'Provide icon (CNSymbol) or flutterIcon (Icon).',
-        ),
-        label = null,
-        round = true,
-        width = size,
-        height = size,
-        shrinkWrap = false,
-        super();
+  }) : assert(
+         icon == null || flutterIcon == null,
+         'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
+       ),
+       assert(
+         icon != null || flutterIcon != null,
+         'Provide icon (CNSymbol) or flutterIcon (Icon).',
+       ),
+       label = null,
+       round = true,
+       width = size,
+       height = size,
+       shrinkWrap = false,
+       super();
 
   /// Button text (null in icon mode).
   final String? label; // null in icon mode
@@ -97,7 +98,8 @@ class CNButton extends StatefulWidget {
   State<CNButton> createState() => _CNButtonState();
 }
 
-class _CNButtonState extends State<CNButton> {
+class _CNButtonState extends State<CNButton>
+    with CNPlatformViewModalVisibility<CNButton> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
@@ -124,7 +126,9 @@ class _CNButtonState extends State<CNButton> {
   double? get _effectiveIconSize =>
       widget.icon?.size ?? widget.flutterIcon?.size;
   int? get _effectiveIconColor => resolveColorToArgb(
-      widget.icon?.color ?? widget.flutterIcon?.color, context);
+    widget.icon?.color ?? widget.flutterIcon?.color,
+    context,
+  );
   double? get _effectiveIconFill => widget.flutterIcon?.fill;
   double? get _effectiveIconWeight => widget.flutterIcon?.weight;
   double? get _effectiveIconGrade => widget.flutterIcon?.grade;
@@ -132,6 +136,9 @@ class _CNButtonState extends State<CNButton> {
 
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void dispose() {
@@ -171,24 +178,23 @@ class _CNButtonState extends State<CNButton> {
               : null,
           child: widget.isIcon
               ? (widget.flutterIcon != null
-                  ? Icon(
-                      widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
-                      size: _effectiveIconSize,
-                      color: widget.flutterIcon!.color,
-                      fill: widget.flutterIcon!.fill,
-                      weight: widget.flutterIcon!.weight,
-                      grade: widget.flutterIcon!.grade,
-                      opticalSize: widget.flutterIcon!.opticalSize,
-                      shadows: widget.flutterIcon!.shadows,
-                    )
-                  : Icon(
-                      CupertinoIcons.ellipsis,
-                      size: _effectiveIconSize,
-                    ))
+                    ? Icon(
+                        widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
+                        size: _effectiveIconSize,
+                        color: widget.flutterIcon!.color,
+                        fill: widget.flutterIcon!.fill,
+                        weight: widget.flutterIcon!.weight,
+                        grade: widget.flutterIcon!.grade,
+                        opticalSize: widget.flutterIcon!.opticalSize,
+                        shadows: widget.flutterIcon!.shadows,
+                      )
+                    : Icon(CupertinoIcons.ellipsis, size: _effectiveIconSize))
               : Text(widget.label ?? ''),
         ),
       );
     }
+
+    trackPlatformViewModalVisibility();
 
     const viewType = 'CupertinoNativeButton';
 
@@ -302,6 +308,7 @@ class _CNButtonState extends State<CNButton> {
     final ch = MethodChannel('CupertinoNativeButton_$id');
     _channel = ch;
     ch.setMethodCallHandler(_onMethodCall);
+    syncPlatformViewModalVisibility();
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
     _lastIsDark = _isDark;
@@ -411,12 +418,14 @@ class _CNButtonState extends State<CNButton> {
         updates['buttonIconColor'] = iconColor;
         _lastIconColor = iconColor;
       }
-      final iconDataChanged = _lastIconCodePoint != preIconCodePoint ||
+      final iconDataChanged =
+          _lastIconCodePoint != preIconCodePoint ||
           _lastIconFontFamily != preIconFontFamily ||
           _lastIconFontPackage != preIconFontPackage ||
           _lastIconMatchTextDirection != preIconMatchTextDirection ||
           _lastIconName != null;
-      final iconDataStyleChanged = _lastIconFill != preIconFill ||
+      final iconDataStyleChanged =
+          _lastIconFill != preIconFill ||
           _lastIconWeight != preIconWeight ||
           _lastIconGrade != preIconGrade ||
           _lastIconOpticalSize != preIconOpticalSize;

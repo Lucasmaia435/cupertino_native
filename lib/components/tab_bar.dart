@@ -3,19 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 
 /// Immutable data describing a single tab bar item.
 class CNTabBarItem {
   /// Creates a tab bar item description.
-  const CNTabBarItem({
-    this.label,
-    this.icon,
-    this.flutterIcon,
-  }) : assert(
-          icon == null || flutterIcon == null,
-          'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
-        );
+  const CNTabBarItem({this.label, this.icon, this.flutterIcon})
+    : assert(
+        icon == null || flutterIcon == null,
+        'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
+      );
 
   /// Optional tab item label.
   final String? label;
@@ -83,7 +81,8 @@ class CNTabBar extends StatefulWidget {
   State<CNTabBar> createState() => _CNTabBarState();
 }
 
-class _CNTabBarState extends State<CNTabBar> {
+class _CNTabBarState extends State<CNTabBar>
+    with CNPlatformViewModalVisibility<CNTabBar> {
   MethodChannel? _channel;
   int? _lastIndex;
   int? _lastTint;
@@ -117,6 +116,9 @@ class _CNTabBarState extends State<CNTabBar> {
       item.flutterIcon?.opticalSize;
   double? _effectiveItemIconSize(CNTabBarItem item) =>
       item.icon?.size ?? item.flutterIcon?.size ?? widget.iconSize;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void didUpdateWidget(covariant CNTabBar oldWidget) {
@@ -168,14 +170,19 @@ class _CNTabBarState extends State<CNTabBar> {
       );
     }
 
+    trackPlatformViewModalVisibility();
+
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-    final iconCodePoints =
-        widget.items.map((e) => _itemIconData(e)?.codePoint).toList();
-    final iconFontFamilies =
-        widget.items.map((e) => _itemIconData(e)?.fontFamily).toList();
-    final iconFontPackages =
-        widget.items.map((e) => _itemIconData(e)?.fontPackage).toList();
+    final iconCodePoints = widget.items
+        .map((e) => _itemIconData(e)?.codePoint)
+        .toList();
+    final iconFontFamilies = widget.items
+        .map((e) => _itemIconData(e)?.fontFamily)
+        .toList();
+    final iconFontPackages = widget.items
+        .map((e) => _itemIconData(e)?.fontPackage)
+        .toList();
     final iconMatchTextDirections = widget.items
         .map((e) => _itemIconData(e)?.matchTextDirection ?? false)
         .toList();
@@ -183,11 +190,16 @@ class _CNTabBarState extends State<CNTabBar> {
     final iconFills = widget.items.map((e) => _itemIconFill(e)).toList();
     final iconWeights = widget.items.map((e) => _itemIconWeight(e)).toList();
     final iconGrades = widget.items.map((e) => _itemIconGrade(e)).toList();
-    final iconOpticalSizes =
-        widget.items.map((e) => _itemIconOpticalSize(e)).toList();
+    final iconOpticalSizes = widget.items
+        .map((e) => _itemIconOpticalSize(e))
+        .toList();
     final colors = widget.items
-        .map((e) =>
-            resolveColorToArgb(e.icon?.color ?? e.flutterIcon?.color, context))
+        .map(
+          (e) => resolveColorToArgb(
+            e.icon?.color ?? e.flutterIcon?.color,
+            context,
+          ),
+        )
         .toList();
 
     final creationParams = <String, dynamic>{
@@ -245,6 +257,7 @@ class _CNTabBarState extends State<CNTabBar> {
     final ch = MethodChannel('CupertinoNativeTabBar_$id');
     _channel = ch;
     ch.setMethodCallHandler(_onMethodCall);
+    syncPlatformViewModalVisibility();
     _lastIndex = widget.currentIndex;
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBg = resolveColorToArgb(widget.backgroundColor, context);
@@ -296,12 +309,15 @@ class _CNTabBarState extends State<CNTabBar> {
     // Items update (for hot reload or dynamic changes)
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-    final iconCodePoints =
-        widget.items.map((e) => _itemIconData(e)?.codePoint).toList();
-    final iconFontFamilies =
-        widget.items.map((e) => _itemIconData(e)?.fontFamily).toList();
-    final iconFontPackages =
-        widget.items.map((e) => _itemIconData(e)?.fontPackage).toList();
+    final iconCodePoints = widget.items
+        .map((e) => _itemIconData(e)?.codePoint)
+        .toList();
+    final iconFontFamilies = widget.items
+        .map((e) => _itemIconData(e)?.fontFamily)
+        .toList();
+    final iconFontPackages = widget.items
+        .map((e) => _itemIconData(e)?.fontPackage)
+        .toList();
     final iconMatchTextDirections = widget.items
         .map((e) => _itemIconData(e)?.matchTextDirection ?? false)
         .toList();
@@ -309,10 +325,11 @@ class _CNTabBarState extends State<CNTabBar> {
     final iconFills = widget.items.map((e) => _itemIconFill(e)).toList();
     final iconWeights = widget.items.map((e) => _itemIconWeight(e)).toList();
     final iconGrades = widget.items.map((e) => _itemIconGrade(e)).toList();
-    final iconOpticalSizes =
-        widget.items.map((e) => _itemIconOpticalSize(e)).toList();
-    final itemsStructureChanged = _listSignature(_lastLabels) !=
-            _listSignature(labels) ||
+    final iconOpticalSizes = widget.items
+        .map((e) => _itemIconOpticalSize(e))
+        .toList();
+    final itemsStructureChanged =
+        _listSignature(_lastLabels) != _listSignature(labels) ||
         _listSignature(_lastSymbols) != _listSignature(symbols) ||
         _listSignature(_lastIconCodePoints) != _listSignature(iconCodePoints) ||
         _listSignature(_lastIconFontFamilies) !=
@@ -323,11 +340,11 @@ class _CNTabBarState extends State<CNTabBar> {
             _listSignature(iconMatchTextDirections);
     final itemIconStyleChanged =
         _listSignature(_lastSizes) != _listSignature(sizes) ||
-            _listSignature(_lastIconFills) != _listSignature(iconFills) ||
-            _listSignature(_lastIconWeights) != _listSignature(iconWeights) ||
-            _listSignature(_lastIconGrades) != _listSignature(iconGrades) ||
-            _listSignature(_lastIconOpticalSizes) !=
-                _listSignature(iconOpticalSizes);
+        _listSignature(_lastIconFills) != _listSignature(iconFills) ||
+        _listSignature(_lastIconWeights) != _listSignature(iconWeights) ||
+        _listSignature(_lastIconGrades) != _listSignature(iconGrades) ||
+        _listSignature(_lastIconOpticalSizes) !=
+            _listSignature(iconOpticalSizes);
     if (itemsStructureChanged) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
@@ -349,8 +366,8 @@ class _CNTabBarState extends State<CNTabBar> {
     } else if (itemIconStyleChanged) {
       final itemCount = widget.items.length;
       for (var i = 0; i < itemCount; i++) {
-        final hasStyleDiff = _listValueAt(_lastSizes, i) !=
-                _listValueAt(sizes, i) ||
+        final hasStyleDiff =
+            _listValueAt(_lastSizes, i) != _listValueAt(sizes, i) ||
             _listValueAt(_lastIconFills, i) != _listValueAt(iconFills, i) ||
             _listValueAt(_lastIconWeights, i) != _listValueAt(iconWeights, i) ||
             _listValueAt(_lastIconGrades, i) != _listValueAt(iconGrades, i) ||
@@ -410,12 +427,15 @@ class _CNTabBarState extends State<CNTabBar> {
   void _cacheItems() {
     _lastLabels = widget.items.map((e) => e.label ?? '').toList();
     _lastSymbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-    _lastIconCodePoints =
-        widget.items.map((e) => _itemIconData(e)?.codePoint).toList();
-    _lastIconFontFamilies =
-        widget.items.map((e) => _itemIconData(e)?.fontFamily).toList();
-    _lastIconFontPackages =
-        widget.items.map((e) => _itemIconData(e)?.fontPackage).toList();
+    _lastIconCodePoints = widget.items
+        .map((e) => _itemIconData(e)?.codePoint)
+        .toList();
+    _lastIconFontFamilies = widget.items
+        .map((e) => _itemIconData(e)?.fontFamily)
+        .toList();
+    _lastIconFontPackages = widget.items
+        .map((e) => _itemIconData(e)?.fontPackage)
+        .toList();
     _lastIconMatchTextDirections = widget.items
         .map((e) => _itemIconData(e)?.matchTextDirection ?? false)
         .toList();
@@ -423,8 +443,9 @@ class _CNTabBarState extends State<CNTabBar> {
     _lastIconFills = widget.items.map((e) => _itemIconFill(e)).toList();
     _lastIconWeights = widget.items.map((e) => _itemIconWeight(e)).toList();
     _lastIconGrades = widget.items.map((e) => _itemIconGrade(e)).toList();
-    _lastIconOpticalSizes =
-        widget.items.map((e) => _itemIconOpticalSize(e)).toList();
+    _lastIconOpticalSizes = widget.items
+        .map((e) => _itemIconOpticalSize(e))
+        .toList();
   }
 
   String _listSignature(List<dynamic>? values) {

@@ -246,6 +246,11 @@ class CupertinoPopupMenuButtonNSView: NSView {
           if let r = args["round"] as? NSNumber, r.boolValue { self.button.bezelStyle = .circular }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing icon args", details: nil)) }
+      case "setVisible":
+        if let args = call.arguments as? [String: Any], let visible = (args["visible"] as? NSNumber)?.boolValue {
+          self.isHidden = !visible
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
           self.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)

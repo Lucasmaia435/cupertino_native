@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 
 /// A Cupertino-native segmented control.
@@ -71,7 +72,8 @@ class CNSegmentedControl extends StatefulWidget {
   State<CNSegmentedControl> createState() => _CNSegmentedControlState();
 }
 
-class _CNSegmentedControlState extends State<CNSegmentedControl> {
+class _CNSegmentedControlState extends State<CNSegmentedControl>
+    with CNPlatformViewModalVisibility<CNSegmentedControl> {
   MethodChannel? _channel;
 
   int? _lastSelected;
@@ -81,6 +83,9 @@ class _CNSegmentedControlState extends State<CNSegmentedControl> {
   double? _intrinsicWidth;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void dispose() {
@@ -118,6 +123,8 @@ class _CNSegmentedControlState extends State<CNSegmentedControl> {
         ),
       );
     }
+
+    trackPlatformViewModalVisibility();
 
     const viewType = 'CupertinoNativeSegmentedControl';
     final creationParams = <String, dynamic>{
@@ -201,6 +208,7 @@ class _CNSegmentedControlState extends State<CNSegmentedControl> {
     _channel = channel;
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    syncPlatformViewModalVisibility();
     _syncBrightnessIfNeeded();
     _requestIntrinsicSize();
   }

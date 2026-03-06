@@ -199,6 +199,11 @@ class CupertinoSearchBarNSView: NSView, NSSearchFieldDelegate {
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
+      case "setVisible":
+        if let params = call.arguments as? [String: Any], let visible = (params["visible"] as? NSNumber)?.boolValue {
+          self.isHidden = !visible
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let params = call.arguments as? [String: Any], let isDark = (params["isDark"] as? NSNumber)?.boolValue {
           self.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
