@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 import '../style/button_style.dart';
 
@@ -139,7 +140,8 @@ class CNPopupMenuButton extends StatefulWidget {
   State<CNPopupMenuButton> createState() => _CNPopupMenuButtonState();
 }
 
-class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
+class _CNPopupMenuButtonState extends State<CNPopupMenuButton>
+    with CNPlatformViewModalVisibility<CNPopupMenuButton> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
@@ -155,6 +157,9 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
   Color? get _effectiveTint =>
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void didUpdateWidget(covariant CNPopupMenuButton oldWidget) {
@@ -256,6 +261,8 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
         ),
       );
     }
+
+    trackPlatformViewModalVisibility();
 
     const viewType = 'CupertinoNativePopupMenuButton';
 
@@ -438,6 +445,7 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
     final ch = MethodChannel('CupertinoNativePopupMenuButton_$id');
     _channel = ch;
     ch.setMethodCallHandler(_onMethodCall);
+    syncPlatformViewModalVisibility();
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastIsDark = _isDark;
     _lastTitle = widget.buttonLabel;

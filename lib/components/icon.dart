@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 
 /// A platform-rendered SF Symbol icon.
@@ -42,7 +43,8 @@ class CNIcon extends StatefulWidget {
   State<CNIcon> createState() => _CNIconState();
 }
 
-class _CNIconState extends State<CNIcon> {
+class _CNIconState extends State<CNIcon>
+    with CNPlatformViewModalVisibility<CNIcon> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   String? _lastName;
@@ -53,6 +55,9 @@ class _CNIconState extends State<CNIcon> {
   // No intrinsic sizing storage; icons use explicit size.
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void didChangeDependencies() {
@@ -74,6 +79,8 @@ class _CNIconState extends State<CNIcon> {
 
   @override
   Widget build(BuildContext context) {
+    trackPlatformViewModalVisibility();
+
     const viewType = 'CupertinoNativeIcon';
 
     final symbol = widget.symbol;
@@ -123,6 +130,7 @@ class _CNIconState extends State<CNIcon> {
     _channel = MethodChannel('CupertinoNativeIcon_$id')
       ..setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    syncPlatformViewModalVisibility();
     _syncBrightnessIfNeeded();
     // No intrinsic measurement needed.
   }

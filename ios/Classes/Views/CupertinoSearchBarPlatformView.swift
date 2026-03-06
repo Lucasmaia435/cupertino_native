@@ -177,6 +177,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
+      case "setVisible":
+        if let params = call.arguments as? [String: Any], let visible = (params["visible"] as? NSNumber)?.boolValue {
+          self.container.isHidden = !visible
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let params = call.arguments as? [String: Any], let isDark = (params["isDark"] as? NSNumber)?.boolValue {
           if #available(iOS 13.0, *) {

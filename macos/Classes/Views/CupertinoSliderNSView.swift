@@ -92,6 +92,11 @@ class CupertinoSliderNSView: NSView {
           model.step = step > 0 ? step : nil
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing step", details: nil)) }
+      case "setVisible":
+        if let args = call.arguments as? [String: Any], let visible = (args["visible"] as? NSNumber)?.boolValue {
+          self.isHidden = !visible
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
           self.hostingController.view.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)

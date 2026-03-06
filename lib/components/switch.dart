@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 
 /// Controller for a [CNSwitch] that allows imperative updates from Dart
 /// to the underlying native UISwitch/NSSwitch instance.
@@ -76,7 +77,8 @@ class CNSwitch extends StatefulWidget {
   State<CNSwitch> createState() => _CNSwitchState();
 }
 
-class _CNSwitchState extends State<CNSwitch> {
+class _CNSwitchState extends State<CNSwitch>
+    with CNPlatformViewModalVisibility<CNSwitch> {
   MethodChannel? _channel;
 
   bool? _lastValue;
@@ -93,6 +95,9 @@ class _CNSwitchState extends State<CNSwitch> {
 
   Color? get _effectiveColor =>
       widget.color ?? CupertinoTheme.of(context).primaryColor;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   @override
   void dispose() {
@@ -126,6 +131,8 @@ class _CNSwitchState extends State<CNSwitch> {
         ),
       );
     }
+
+    trackPlatformViewModalVisibility();
 
     const viewType = 'CupertinoNativeSwitch';
     // Platform views expand to the biggest size in unconstrained axes.
@@ -191,6 +198,7 @@ class _CNSwitchState extends State<CNSwitch> {
     _controller._attach(channel);
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    syncPlatformViewModalVisibility();
     _syncBrightnessIfNeeded();
   }
 
