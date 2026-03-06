@@ -568,7 +568,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   }
 
   private static func materializedBackgroundColor(_ color: UIColor) -> UIColor {
-    color.withAlphaComponent(min(color.cgColor.alpha, 0.78))
+    color.withAlphaComponent(min(color.cgColor.alpha * 0.45, 0.32))
   }
 
   private func applyButtonStyle(buttonStyle: String, round: Bool) {
@@ -577,6 +577,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       let currentTitle = button.configuration?.title
       let currentImage = button.configuration?.image
       let currentSymbolCfg = button.configuration?.preferredSymbolConfigurationForImage
+      let hasCustomBackground = currentBackgroundColor != nil
       var config: UIButton.Configuration
       switch buttonStyle {
       case "plain": config = .plain()
@@ -605,8 +606,12 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       if let tint = button.tintColor {
         switch buttonStyle {
         case "filled", "borderedProminent", "prominentGlass":
-          // Treat prominentGlass like filled: color the background and let system pick readable foreground
-          config.baseBackgroundColor = tint
+          if hasCustomBackground {
+            config.baseForegroundColor = tint
+          } else {
+            // Treat prominentGlass like filled: color the background and let system pick readable foreground
+            config.baseBackgroundColor = tint
+          }
         case "tinted", "bordered", "gray", "plain", "glass":
           // Foreground-only tint
           config.baseForegroundColor = tint
@@ -616,9 +621,12 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       }
       if let backgroundColor = currentBackgroundColor {
         let materialBackground = Self.materializedBackgroundColor(backgroundColor)
-        config.baseBackgroundColor = materialBackground
         config.background.backgroundColor = materialBackground
-        if buttonStyle != "glass" && buttonStyle != "prominentGlass" {
+        if buttonStyle == "glass" || buttonStyle == "prominentGlass" {
+          config.baseBackgroundColor = materialBackground
+        } else {
+          // Avoid baseBackgroundColor here because it turns the material back into a solid fill.
+          config.baseBackgroundColor = nil
           // Match the softer native bar/chrome treatment instead of a fully solid fill.
           config.background.visualEffect = UIBlurEffect(style: .systemChromeMaterial)
         }
