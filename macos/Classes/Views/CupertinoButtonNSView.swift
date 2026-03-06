@@ -6,6 +6,9 @@ class CupertinoButtonNSView: NSView {
   private let button: NSButton
   private var isEnabled: Bool = true
   private var currentButtonStyle: String = "automatic"
+  private var currentTintColor: NSColor? = nil
+  private var currentBackgroundColor: NSColor? = nil
+  private var isRoundButton: Bool = false
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
@@ -20,6 +23,7 @@ class CupertinoButtonNSView: NSView {
     var buttonStyle: String = "automatic"
     var isDark: Bool = false
     var tint: NSColor? = nil
+    var backgroundColor: NSColor? = nil
     var enabled: Bool = true
     var iconMode: String? = nil
     var iconPalette: [NSNumber] = []
@@ -32,7 +36,12 @@ class CupertinoButtonNSView: NSView {
       if let r = dict["round"] as? NSNumber { makeRound = r.boolValue }
       if let bs = dict["buttonStyle"] as? String { buttonStyle = bs }
       if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
-      if let style = dict["style"] as? [String: Any], let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
+      if let style = dict["style"] as? [String: Any] {
+        if let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
+        if let n = style["backgroundColor"] as? NSNumber {
+          backgroundColor = Self.colorFromARGB(n.intValue)
+        }
+      }
       if let e = dict["enabled"] as? NSNumber { enabled = e.boolValue }
       if let m = dict["buttonIconRenderingMode"] as? String { iconMode = m }
       if let pal = dict["buttonIconPaletteColors"] as? [NSNumber] { iconPalette = pal }
@@ -41,6 +50,10 @@ class CupertinoButtonNSView: NSView {
     wantsLayer = true
     layer?.backgroundColor = NSColor.clear.cgColor
     appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+    currentTintColor = tint
+    currentBackgroundColor = backgroundColor
+    currentButtonStyle = buttonStyle
+    isRoundButton = makeRound
 
     if let t = title { button.title = t }
     if let name = iconName, var image = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
@@ -75,31 +88,8 @@ class CupertinoButtonNSView: NSView {
       button.image = image
       button.imagePosition = .imageOnly
     }
-    // Map button styles best-effort to AppKit
-    switch buttonStyle {
-    case "plain":
-      button.bezelStyle = .texturedRounded
-      button.isBordered = false
-    case "gray": button.bezelStyle = .texturedRounded
-    case "tinted": button.bezelStyle = .texturedRounded
-    case "bordered": button.bezelStyle = .rounded
-    case "borderedProminent": button.bezelStyle = .rounded
-    case "filled": button.bezelStyle = .rounded
-    case "glass": button.bezelStyle = .texturedRounded
-    case "prominentGlass": button.bezelStyle = .texturedRounded
-    default: button.bezelStyle = .rounded
-    }
-    if makeRound { button.bezelStyle = .circular }
+    applyButtonStyle()
     button.setButtonType(.momentaryPushIn)
-    if #available(macOS 10.14, *), let c = tint {
-      if ["filled", "borderedProminent", "prominentGlass"].contains(buttonStyle) {
-        button.bezelColor = c
-        button.contentTintColor = .white
-      } else {
-        button.contentTintColor = c
-      }
-    }
-    currentButtonStyle = buttonStyle
     button.isEnabled = enabled
     isEnabled = enabled
 
@@ -123,34 +113,24 @@ class CupertinoButtonNSView: NSView {
         result(["width": Double(s.width), "height": Double(s.height)])
       case "setStyle":
         if let args = call.arguments as? [String: Any] {
-          if #available(macOS 10.14, *), let n = args["tint"] as? NSNumber {
-            let color = Self.colorFromARGB(n.intValue)
-            if ["filled", "borderedProminent", "prominentGlass"].contains(self.currentButtonStyle) {
-              self.button.bezelColor = color
-              self.button.contentTintColor = .white
-            } else {
-              self.button.contentTintColor = color
-            }
+          var shouldReapplyStyle = false
+          if let n = args["tint"] as? NSNumber {
+            self.currentTintColor = Self.colorFromARGB(n.intValue)
+            shouldReapplyStyle = true
+          }
+          if args["backgroundColor"] is NSNull {
+            self.currentBackgroundColor = nil
+            shouldReapplyStyle = true
+          } else if let n = args["backgroundColor"] as? NSNumber {
+            self.currentBackgroundColor = Self.colorFromARGB(n.intValue)
+            shouldReapplyStyle = true
           }
           if let bs = args["buttonStyle"] as? String {
             self.currentButtonStyle = bs
-            switch bs {
-            case "plain":
-              self.button.bezelStyle = .texturedRounded
-              self.button.isBordered = false
-            case "gray": self.button.bezelStyle = .texturedRounded
-            case "tinted": self.button.bezelStyle = .texturedRounded
-            case "bordered": self.button.bezelStyle = .rounded
-            case "borderedProminent": self.button.bezelStyle = .rounded
-            case "filled": self.button.bezelStyle = .rounded
-            case "glass": self.button.bezelStyle = .texturedRounded
-            case "prominentGlass": self.button.bezelStyle = .texturedRounded
-            default: self.button.bezelStyle = .rounded
-            }
-            if bs != "plain" { self.button.isBordered = true }
-            if #available(macOS 10.14, *), let c = self.button.contentTintColor, ["filled", "borderedProminent"].contains(self.currentButtonStyle) {
-              self.button.bezelColor = c
-            }
+            shouldReapplyStyle = true
+          }
+          if shouldReapplyStyle {
+            self.applyButtonStyle()
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -237,6 +217,51 @@ class CupertinoButtonNSView: NSView {
     let g = CGFloat((argb >> 8) & 0xFF) / 255.0
     let b = CGFloat(argb & 0xFF) / 255.0
     return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+  }
+
+  private func applyButtonStyle() {
+    switch currentButtonStyle {
+    case "plain":
+      button.bezelStyle = .texturedRounded
+      button.isBordered = false
+    case "gray": button.bezelStyle = .texturedRounded
+    case "tinted": button.bezelStyle = .texturedRounded
+    case "bordered": button.bezelStyle = .rounded
+    case "borderedProminent": button.bezelStyle = .rounded
+    case "filled": button.bezelStyle = .rounded
+    case "glass": button.bezelStyle = .texturedRounded
+    case "prominentGlass": button.bezelStyle = .texturedRounded
+    default: button.bezelStyle = .rounded
+    }
+    if currentButtonStyle != "plain" {
+      button.isBordered = true
+    }
+    if isRoundButton {
+      button.bezelStyle = .circular
+    }
+
+    if #available(macOS 10.14, *) {
+      if let tint = currentTintColor {
+        if ["filled", "borderedProminent", "prominentGlass"].contains(currentButtonStyle) {
+          button.contentTintColor = .white
+        } else {
+          button.contentTintColor = tint
+        }
+      }
+
+      if let background = currentBackgroundColor {
+        button.bezelColor = background
+        if currentButtonStyle == "plain" {
+          button.isBordered = true
+          button.bezelStyle = isRoundButton ? .circular : .rounded
+        }
+      } else if ["filled", "borderedProminent", "prominentGlass"].contains(currentButtonStyle),
+                let tint = currentTintColor {
+        button.bezelColor = tint
+      } else {
+        button.bezelColor = nil
+      }
+    }
   }
 }
 

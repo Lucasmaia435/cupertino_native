@@ -7,6 +7,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private let button: UIButton
   private var isEnabled: Bool = true
   private var currentButtonStyle: String = "automatic"
+  private var currentBackgroundColor: UIColor? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
@@ -20,6 +21,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     var makeRound: Bool = false
     var isDark: Bool = false
     var tint: UIColor? = nil
+    var backgroundColor: UIColor? = nil
     var buttonStyle: String = "automatic"
     var enabled: Bool = true
     var iconMode: String? = nil
@@ -32,7 +34,12 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       if let c = dict["buttonIconColor"] as? NSNumber { iconColor = Self.colorFromARGB(c.intValue) }
       if let r = dict["round"] as? NSNumber { makeRound = r.boolValue }
       if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
-      if let style = dict["style"] as? [String: Any], let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
+      if let style = dict["style"] as? [String: Any] {
+        if let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
+        if let n = style["backgroundColor"] as? NSNumber {
+          backgroundColor = Self.colorFromARGB(n.intValue)
+        }
+      }
       if let bs = dict["buttonStyle"] as? String { buttonStyle = bs }
       if let e = dict["enabled"] as? NSNumber { enabled = e.boolValue }
       if let m = dict["buttonIconRenderingMode"] as? String { iconMode = m }
@@ -56,8 +63,9 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       button.bottomAnchor.constraint(equalTo: container.bottomAnchor),
     ])
 
-    applyButtonStyle(buttonStyle: buttonStyle, round: makeRound)
     currentButtonStyle = buttonStyle
+    currentBackgroundColor = backgroundColor
+    applyButtonStyle(buttonStyle: buttonStyle, round: makeRound)
     button.isEnabled = enabled
     isEnabled = enabled
 
@@ -108,14 +116,24 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         result(["width": Double(size.width), "height": Double(size.height)])
       case "setStyle":
         if let args = call.arguments as? [String: Any] {
+          var shouldReapplyStyle = false
           if let n = args["tint"] as? NSNumber {
             self.button.tintColor = Self.colorFromARGB(n.intValue)
-            // Re-apply style so configuration picks up new base colors
-            self.applyButtonStyle(buttonStyle: self.currentButtonStyle, round: makeRound)
+            shouldReapplyStyle = true
+          }
+          if args["backgroundColor"] is NSNull {
+            self.currentBackgroundColor = nil
+            shouldReapplyStyle = true
+          } else if let n = args["backgroundColor"] as? NSNumber {
+            self.currentBackgroundColor = Self.colorFromARGB(n.intValue)
+            shouldReapplyStyle = true
           }
           if let bs = args["buttonStyle"] as? String {
             self.currentButtonStyle = bs
-            self.applyButtonStyle(buttonStyle: bs, round: makeRound)
+            shouldReapplyStyle = true
+          }
+          if shouldReapplyStyle {
+            self.applyButtonStyle(buttonStyle: self.currentButtonStyle, round: makeRound)
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -243,6 +261,10 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
           break
         }
       }
+      if let backgroundColor = currentBackgroundColor {
+        config.baseBackgroundColor = backgroundColor
+        config.background.backgroundColor = backgroundColor
+      }
       // Restore content after style swap
       config.title = currentTitle
       config.image = currentImage
@@ -251,8 +273,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     } else {
       button.layer.cornerRadius = round ? 999 : 8
       button.clipsToBounds = true
-      // Default background to preserve pressed/highlight behavior; custom glass handled above for iOS15+
-      button.backgroundColor = .clear
+      button.backgroundColor = currentBackgroundColor ?? .clear
       button.layer.borderWidth = 0
     }
   }

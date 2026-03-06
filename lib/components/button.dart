@@ -19,6 +19,7 @@ class CNButton extends StatefulWidget {
     this.onPressed,
     this.enabled = true,
     this.tint,
+    this.backgroundColor,
     this.height = 32.0,
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
@@ -33,6 +34,7 @@ class CNButton extends StatefulWidget {
     this.onPressed,
     this.enabled = true,
     this.tint,
+    this.backgroundColor,
     double size = 44.0,
     this.style = CNButtonStyle.glass,
   }) : label = null,
@@ -54,6 +56,9 @@ class CNButton extends StatefulWidget {
 
   /// Accent/tint color.
   final Color? tint;
+
+  /// Optional background color for the native button body.
+  final Color? backgroundColor;
 
   /// Control height.
   final double height;
@@ -80,6 +85,7 @@ class _CNButtonState extends State<CNButton> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
+  int? _lastBackground;
   String? _lastTitle;
   String? _lastIconName;
   double? _lastIconSize;
@@ -123,6 +129,7 @@ class _CNButtonState extends State<CNButton> {
             ? (widget.width ?? widget.height)
             : null,
         child: CupertinoButton(
+          color: widget.backgroundColor,
           padding: widget.isIcon
               ? const EdgeInsets.all(4)
               : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -156,7 +163,14 @@ class _CNButtonState extends State<CNButton> {
       'buttonStyle': widget.style.name,
       'enabled': (widget.enabled && widget.onPressed != null),
       'isDark': _isDark,
-      'style': encodeStyle(context, tint: _effectiveTint),
+      'style': encodeStyle(context, tint: _effectiveTint)
+        ..addAll({
+          if (widget.backgroundColor != null)
+            'backgroundColor': resolveColorToArgb(
+              widget.backgroundColor,
+              context,
+            ),
+        }),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
@@ -227,6 +241,7 @@ class _CNButtonState extends State<CNButton> {
     _channel = ch;
     ch.setMethodCallHandler(_onMethodCall);
     _lastTint = resolveColorToArgb(_effectiveTint, context);
+    _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
@@ -265,17 +280,26 @@ class _CNButtonState extends State<CNButton> {
     final ch = _channel;
     if (ch == null) return;
     final tint = resolveColorToArgb(_effectiveTint, context);
+    final background = resolveColorToArgb(widget.backgroundColor, context);
     final preIconName = widget.icon?.name;
     final preIconSize = widget.icon?.size;
     final preIconColor = resolveColorToArgb(widget.icon?.color, context);
 
+    final styleUpdates = <String, dynamic>{};
     if (_lastTint != tint && tint != null) {
-      await ch.invokeMethod('setStyle', {'tint': tint});
+      styleUpdates['tint'] = tint;
       _lastTint = tint;
     }
+    if (_lastBackground != background) {
+      styleUpdates['backgroundColor'] = background;
+      _lastBackground = background;
+    }
     if (_lastStyle != widget.style) {
-      await ch.invokeMethod('setStyle', {'buttonStyle': widget.style.name});
+      styleUpdates['buttonStyle'] = widget.style.name;
       _lastStyle = widget.style;
+    }
+    if (styleUpdates.isNotEmpty) {
+      await ch.invokeMethod('setStyle', styleUpdates);
     }
     // Enabled state
     await ch.invokeMethod('setEnabled', {
@@ -327,14 +351,23 @@ class _CNButtonState extends State<CNButton> {
     // Capture context-derived values before any awaits
     final isDark = _isDark;
     final tint = resolveColorToArgb(_effectiveTint, context);
+    final background = resolveColorToArgb(widget.backgroundColor, context);
     if (_lastIsDark != isDark) {
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
       _lastIsDark = isDark;
     }
     // Also propagate theme-driven tint changes (e.g., accent color changes)
+    final styleUpdates = <String, dynamic>{};
     if (_lastTint != tint && tint != null) {
-      await ch.invokeMethod('setStyle', {'tint': tint});
+      styleUpdates['tint'] = tint;
       _lastTint = tint;
+    }
+    if (_lastBackground != background) {
+      styleUpdates['backgroundColor'] = background;
+      _lastBackground = background;
+    }
+    if (styleUpdates.isNotEmpty) {
+      await ch.invokeMethod('setStyle', styleUpdates);
     }
   }
 
