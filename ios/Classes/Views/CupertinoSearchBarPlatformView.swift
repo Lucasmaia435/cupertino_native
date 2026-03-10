@@ -88,7 +88,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private let cancelButton: UIButton
   private var glassHostingController: UIHostingController<AnyView>?
   private var leadingSearchWidthConstraint: NSLayoutConstraint!
-  private var searchButtonFirstLineCenterYConstraint: NSLayoutConstraint!
+  private var searchButtonCenterYConstraint: NSLayoutConstraint!
   private var trailingStackFirstLineCenterYConstraint: NSLayoutConstraint!
   private var trailingStackCenterYConstraint: NSLayoutConstraint!
   private var trailingStackTrailingConstraint: NSLayoutConstraint!
@@ -117,6 +117,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   private let compactHorizontalPadding: CGFloat = 16
   private let compactVerticalPadding: CGFloat = 8
+  private let textOpticalVerticalOffset: CGFloat = 1.5
   private let fieldCornerRadius: CGFloat = 28
   private let accessoryButtonSize: CGFloat = 32
   private let sendButtonOuterInset: CGFloat = 8
@@ -305,10 +306,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
     leadingSearchWidthConstraint = searchButton.widthAnchor.constraint(equalToConstant: accessoryButtonSize)
     let firstLineCenterOffset = currentFirstLineCenterOffset()
-    searchButtonFirstLineCenterYConstraint = searchButton.centerYAnchor.constraint(
-      equalTo: textView.topAnchor,
-      constant: firstLineCenterOffset
-    )
+    searchButtonCenterYConstraint = searchButton.centerYAnchor.constraint(equalTo: fieldClipView.centerYAnchor)
     trailingStackFirstLineCenterYConstraint = trailingStackView.centerYAnchor.constraint(
       equalTo: textView.topAnchor,
       constant: firstLineCenterOffset
@@ -353,7 +351,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
 
       searchButton.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor, constant: compactHorizontalPadding - 4),
-      searchButtonFirstLineCenterYConstraint,
+      searchButtonCenterYConstraint,
       searchButton.heightAnchor.constraint(equalToConstant: accessoryButtonSize),
       leadingSearchWidthConstraint,
 
@@ -623,7 +621,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private func applyMode(_ isSearch: Bool) {
     isSearchMode = isSearch
     leadingSearchWidthConstraint.constant = isSearch ? accessoryButtonSize : 0
-    searchButtonFirstLineCenterYConstraint.isActive = isSearch
     updateTrailingAccessoryAlignment()
     refreshAccessoryButtons()
     container.setNeedsLayout()
@@ -731,14 +728,15 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     let lineHeight = ceil(textView.font?.lineHeight ?? UIFont.systemFont(ofSize: 17).lineHeight)
     let centeredInset = (requestedMinHeight - lineHeight) / 2.0
     let verticalInset = max(compactVerticalPadding - 1, centeredInset)
+    let topInset = verticalInset + textOpticalVerticalOffset
+    let bottomInset = max(0, verticalInset - textOpticalVerticalOffset)
     textView.textContainerInset = UIEdgeInsets(
-      top: verticalInset,
+      top: topInset,
       left: 0,
-      bottom: verticalInset,
+      bottom: bottomInset,
       right: 0
     )
-    let firstLineCenterOffset = verticalInset + (lineHeight / 2.0)
-    searchButtonFirstLineCenterYConstraint?.constant = firstLineCenterOffset
+    let firstLineCenterOffset = topInset + (lineHeight / 2.0)
     trailingStackFirstLineCenterYConstraint?.constant = firstLineCenterOffset
     placeholderTopConstraint?.constant = firstLineCenterOffset
   }
@@ -804,9 +802,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       currentFieldHeight ?? (lastReportedHeight > 0 ? lastReportedHeight : requestedMinHeight)
     )
     let centersSendButton = showsSendButton && resolvedFieldHeight <= requestedMinHeight + 0.5
-    let alignsToTextCenter = isSearchMode || !resolvedHasText
-    trailingStackFirstLineCenterYConstraint.isActive = alignsToTextCenter
-    trailingStackCenterYConstraint.isActive = centersSendButton
+    let alignsToFieldCenter = isSearchMode || !resolvedHasText || centersSendButton
+    trailingStackFirstLineCenterYConstraint.isActive = false
+    trailingStackCenterYConstraint.isActive = alignsToFieldCenter
     trailingStackBottomConstraint.isActive = showsSendButton && !centersSendButton
     trailingStackTrailingConstraint.constant = showsSendButton ? -sendButtonOuterInset : -(compactHorizontalPadding - 2)
     trailingStackBottomConstraint.constant = -sendButtonOuterInset
@@ -970,7 +968,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   }
 
   private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
-    return min(128, max(12, action.iconDataSize))
+    return min(17, max(12, action.iconDataSize))
   }
 
   private static func iconImage(
