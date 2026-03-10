@@ -173,6 +173,7 @@ class _CNTextFieldState extends State<CNTextField> {
   int? _lastBackground;
   int? _lastFieldBackground;
   int? _lastSendButtonBackground;
+  int? _lastPlaceholderColor;
   double? _lastMinimumHeight;
   String? _lastTraillingActionsSignature;
 
@@ -223,6 +224,15 @@ class _CNTextFieldState extends State<CNTextField> {
 
   Color? get _effectiveSendButtonBackgroundColor =>
       widget.sendButtonBackgroundColor ?? _effectiveTint;
+
+  Color _resolvedPlaceholderColor(BuildContext context) {
+    final base = CupertinoDynamicColor.resolve(
+      CupertinoTheme.of(context).textTheme.textStyle.color ??
+          CupertinoColors.label,
+      context,
+    );
+    return base.withValues(alpha: _isDark ? 0.44 : 0.34);
+  }
 
   @override
   void initState() {
@@ -453,6 +463,10 @@ class _CNTextFieldState extends State<CNTextField> {
       _effectiveSendButtonBackgroundColor,
       context,
     );
+    _lastPlaceholderColor = resolveColorToArgb(
+      _resolvedPlaceholderColor(context),
+      context,
+    );
     _lastMinimumHeight = _minimumHeight;
     _lastTraillingActionsSignature = _traillingActionsSignature(widget.actions);
   }
@@ -473,6 +487,10 @@ class _CNTextFieldState extends State<CNTextField> {
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
     final sendButtonBackground = resolveColorToArgb(
       _effectiveSendButtonBackgroundColor,
+      context,
+    );
+    final placeholderColor = resolveColorToArgb(
+      _resolvedPlaceholderColor(context),
       context,
     );
     final traillingActions = widget.actions;
@@ -557,6 +575,10 @@ class _CNTextFieldState extends State<CNTextField> {
       style['sendButtonBackgroundColor'] = sendButtonBackground;
       _lastSendButtonBackground = sendButtonBackground;
     }
+    if (_lastPlaceholderColor != placeholderColor && placeholderColor != null) {
+      style['placeholderColor'] = placeholderColor;
+      _lastPlaceholderColor = placeholderColor;
+    }
     if (style.isNotEmpty) {
       await channel.invokeMethod('setStyle', style);
     }
@@ -572,6 +594,10 @@ class _CNTextFieldState extends State<CNTextField> {
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
     final sendButtonBackground = resolveColorToArgb(
       _effectiveSendButtonBackgroundColor,
+      context,
+    );
+    final placeholderColor = resolveColorToArgb(
+      _resolvedPlaceholderColor(context),
       context,
     );
 
@@ -596,6 +622,10 @@ class _CNTextFieldState extends State<CNTextField> {
     if (_lastSendButtonBackground != sendButtonBackground) {
       style['sendButtonBackgroundColor'] = sendButtonBackground;
       _lastSendButtonBackground = sendButtonBackground;
+    }
+    if (_lastPlaceholderColor != placeholderColor && placeholderColor != null) {
+      style['placeholderColor'] = placeholderColor;
+      _lastPlaceholderColor = placeholderColor;
     }
     if (style.isNotEmpty) {
       await channel.invokeMethod('setStyle', style);
@@ -688,6 +718,10 @@ class _CNTextFieldState extends State<CNTextField> {
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
         ..addAll({
+          'placeholderColor': resolveColorToArgb(
+            _resolvedPlaceholderColor(context),
+            context,
+          ),
           if (widget.backgroundColor != null)
             'backgroundColor': resolveColorToArgb(
               widget.backgroundColor,
@@ -752,10 +786,7 @@ class _CNTextFieldState extends State<CNTextField> {
       widget.fieldBackgroundColor ?? CupertinoColors.systemGrey5,
       context,
     );
-    final resolvedPlaceholderColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.placeholderText,
-      context,
-    );
+    final resolvedPlaceholderColor = _resolvedPlaceholderColor(context);
     final resolvedSecondaryLabel = CupertinoDynamicColor.resolve(
       CupertinoColors.secondaryLabel,
       context,
@@ -851,10 +882,10 @@ class _CNTextFieldState extends State<CNTextField> {
             trailingAccessory = _AccessoryButton(
               onPressed: _clearText,
               foregroundColor: resolvedSecondaryLabel,
-              child: Icon(
-                CupertinoIcons.clear_thick_circled,
-                size: 18,
-                color: resolvedSecondaryLabel,
+                            child: Icon(
+                              CupertinoIcons.clear_thick_circled,
+                              size: 18,
+                              color: resolvedSecondaryLabel,
               ),
             );
           } else if (_showsActions) {
@@ -925,8 +956,12 @@ class _CNTextFieldState extends State<CNTextField> {
                           onPressed: widget.enabled
                               ? _handleSubmitPressed
                               : null,
-                          foregroundColor: resolvedSecondaryLabel,
-                          child: const Icon(CupertinoIcons.search, size: 18),
+                          foregroundColor: resolvedPlaceholderColor,
+                          child: Icon(
+                            CupertinoIcons.search,
+                            size: 18,
+                            color: resolvedPlaceholderColor,
+                          ),
                         ),
                       ),
                     Expanded(
@@ -1013,7 +1048,10 @@ class _CNTextFieldState extends State<CNTextField> {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
               minimumSize: const Size(28, 28),
               onPressed: widget.enabled ? _handleCancelPressed : null,
-              child: const Text('Cancel'),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: effectiveTint),
+              ),
             ),
           ),
         ],

@@ -6,7 +6,6 @@ import SwiftUI
 @available(macOS 26.0, *)
 private struct MacGlassInputBackground: View {
   let cornerRadius: CGFloat
-  let accentColor: NSColor
   let isDark: Bool
   let isEnabled: Bool
 
@@ -15,27 +14,8 @@ private struct MacGlassInputBackground: View {
     shape
       .fill(Color.clear)
       .glassEffect(.regular, in: shape)
-      .overlay(
-        shape.stroke(
-          Color.white.opacity(isDark ? 0.18 : 0.34),
-          lineWidth: 1
-        )
-      )
       .overlay {
-        shape.fill(
-          LinearGradient(
-            colors: [
-              Color.white.opacity(isDark ? 0.14 : 0.22),
-              Color.white.opacity(isDark ? 0.04 : 0.08),
-              Color.clear,
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-          )
-        )
-      }
-      .overlay {
-        shape.fill(Color(nsColor: accentColor).opacity(isDark ? 0.04 : 0.06))
+        shape.fill(Color.white.opacity(isDark ? 0.08 : 0.14))
       }
       .opacity(isEnabled ? 1.0 : 0.9)
       .allowsHitTesting(false)
@@ -100,6 +80,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private var customBackgroundColor: NSColor? = nil
   private var customFieldBackgroundColor: NSColor? = nil
   private var customSendButtonBackgroundColor: NSColor? = nil
+  private var customPlaceholderColor: NSColor? = nil
   private var controlEnabled = true
   private var focusEnabled = true
   private var isSearchMode = true
@@ -154,6 +135,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     var bg: NSColor? = nil
     var fieldBg: NSColor? = nil
     var sendButtonBg: NSColor? = nil
+    var placeholderColor: NSColor? = nil
     var trailingActions: [TrailingAction] = []
 
     if let dict = args as? [String: Any] {
@@ -174,6 +156,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
         if let value = style["sendButtonBackgroundColor"] as? NSNumber {
           sendButtonBg = Self.colorFromARGB(value.intValue)
         }
+        if let value = style["placeholderColor"] as? NSNumber {
+          placeholderColor = Self.colorFromARGB(value.intValue)
+        }
       }
       trailingActions = Self.parseTrailingActions(dict["traillingActions"])
     }
@@ -188,6 +173,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     customBackgroundColor = bg
     customFieldBackgroundColor = fieldBg
     customSendButtonBackgroundColor = sendButtonBg
+    customPlaceholderColor = placeholderColor
     controlEnabled = enabled
     self.focusEnabled = focusEnabled
     self.isSearchMode = isSearchMode
@@ -463,6 +449,11 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
           } else if params.keys.contains("sendButtonBackgroundColor") {
             self.customSendButtonBackgroundColor = nil
           }
+          if let value = params["placeholderColor"] as? NSNumber {
+            self.customPlaceholderColor = Self.colorFromARGB(value.intValue)
+          } else if params.keys.contains("placeholderColor") {
+            self.customPlaceholderColor = nil
+          }
           self.applyVisualStyle()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -714,8 +705,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
           isDarkAppearance ? 0.18 : 0.22
         ).cgColor
       } else {
-        fieldTintOverlayView.layer?.backgroundColor =
-          NSColor.white.withAlphaComponent(isDarkAppearance ? 0.04 : 0.08).cgColor
+        fieldTintOverlayView.layer?.backgroundColor = NSColor.clear.cgColor
       }
     } else if let customFieldBackgroundColor {
       fieldBackgroundView.isHidden = true
@@ -725,19 +715,26 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       glassHostingView?.isHidden = true
       fieldBackgroundView.isHidden = false
       fieldBackgroundView.material = isDarkAppearance ? .menu : .hudWindow
-      fieldTintOverlayView.layer?.backgroundColor =
-        NSColor.windowBackgroundColor.withAlphaComponent(isDarkAppearance ? 0.14 : 0.20).cgColor
+      fieldTintOverlayView.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     textView.textColor = .labelColor
     textView.insertionPointColor = currentTint ?? .controlAccentColor
-    placeholderLabel.textColor = .placeholderTextColor
+    placeholderLabel.textColor = customPlaceholderColor ?? themedPlaceholderColor()
     if #available(macOS 10.14, *) {
-      clearButton.contentTintColor = .secondaryLabelColor
+      let cancelColor = currentTint ?? .controlAccentColor
+      clearButton.contentTintColor = customPlaceholderColor ?? themedPlaceholderColor()
       clearButton.layer?.backgroundColor = NSColor.clear.cgColor
       clearButton.layer?.cornerRadius = 0
-      cancelButton.contentTintColor = currentTint ?? .controlAccentColor
-      searchButton.contentTintColor = .secondaryLabelColor
+      cancelButton.contentTintColor = cancelColor
+      cancelButton.attributedTitle = NSAttributedString(
+        string: "Cancel",
+        attributes: [
+          .foregroundColor: cancelColor,
+          .font: cancelButton.font ?? NSFont.systemFont(ofSize: 14)
+        ]
+      )
+      searchButton.contentTintColor = customPlaceholderColor ?? themedPlaceholderColor()
       searchButton.layer?.backgroundColor = NSColor.clear.cgColor
       searchButton.layer?.cornerRadius = 0
       sendButton.contentTintColor = .white
@@ -757,6 +754,10 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
   private func updatePlaceholderVisibility() {
     placeholderLabel.isHidden = !textView.string.isEmpty
+  }
+
+  private func themedPlaceholderColor() -> NSColor {
+    return NSColor.labelColor.withAlphaComponent(isDarkAppearance ? 0.44 : 0.34)
   }
 
   private func updateTrailingAccessoryAlignment(
@@ -915,7 +916,6 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       rootView: AnyView(
         MacGlassInputBackground(
           cornerRadius: fieldCornerRadius,
-          accentColor: currentTint ?? .controlAccentColor,
           isDark: isDarkAppearance,
           isEnabled: controlEnabled
         )
@@ -938,7 +938,6 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     glassHostingView?.rootView = AnyView(
       MacGlassInputBackground(
         cornerRadius: fieldCornerRadius,
-        accentColor: currentTint ?? .controlAccentColor,
         isDark: isDarkAppearance,
         isEnabled: controlEnabled
       )

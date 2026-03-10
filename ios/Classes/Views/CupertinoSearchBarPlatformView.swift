@@ -15,7 +15,6 @@ private final class LayoutAwareSearchContainerView: UIView {
 @available(iOS 26.0, *)
 private struct IOSGlassInputBackground: View {
   let cornerRadius: CGFloat
-  let accentColor: UIColor
   let isDark: Bool
   let isEnabled: Bool
 
@@ -24,27 +23,8 @@ private struct IOSGlassInputBackground: View {
     shape
       .fill(Color.clear)
       .glassEffect(.regular, in: shape)
-      .overlay(
-        shape.stroke(
-          Color.white.opacity(isDark ? 0.18 : 0.34),
-          lineWidth: 1
-        )
-      )
       .overlay {
-        shape.fill(
-          LinearGradient(
-            colors: [
-              Color.white.opacity(isDark ? 0.14 : 0.22),
-              Color.white.opacity(isDark ? 0.04 : 0.08),
-              Color.clear,
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-          )
-        )
-      }
-      .overlay {
-        shape.fill(Color(uiColor: accentColor).opacity(isDark ? 0.04 : 0.06))
+        shape.fill(Color.white.opacity(isDark ? 0.08 : 0.14))
       }
       .opacity(isEnabled ? 1.0 : 0.9)
       .allowsHitTesting(false)
@@ -104,6 +84,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var customBackgroundColor: UIColor?
   private var customFieldBackgroundColor: UIColor?
   private var customSendButtonBackgroundColor: UIColor?
+  private var customPlaceholderColor: UIColor?
   private var controlEnabled = true
   private var focusEnabled = true
   private var isSearchMode = true
@@ -160,6 +141,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     var bg: UIColor? = nil
     var fieldBg: UIColor? = nil
     var sendButtonBg: UIColor? = nil
+    var placeholderColor: UIColor? = nil
     var trailingActions: [TrailingAction] = []
 
     if let dict = args as? [String: Any] {
@@ -180,6 +162,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
         if let value = style["sendButtonBackgroundColor"] as? NSNumber {
           sendButtonBg = Self.colorFromARGB(value.intValue)
         }
+        if let value = style["placeholderColor"] as? NSNumber {
+          placeholderColor = Self.colorFromARGB(value.intValue)
+        }
       }
       trailingActions = Self.parseTrailingActions(dict["traillingActions"])
     }
@@ -194,6 +179,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     customBackgroundColor = bg
     customFieldBackgroundColor = fieldBg
     customSendButtonBackgroundColor = sendButtonBg
+    customPlaceholderColor = placeholderColor
     controlEnabled = enabled
     self.focusEnabled = focusEnabled
     self.isSearchMode = isSearchMode
@@ -453,6 +439,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
           } else if params.keys.contains("sendButtonBackgroundColor") {
             self.customSendButtonBackgroundColor = nil
           }
+          if let value = params["placeholderColor"] as? NSNumber {
+            self.customPlaceholderColor = Self.colorFromARGB(value.intValue)
+          } else if params.keys.contains("placeholderColor") {
+            self.customPlaceholderColor = nil
+          }
           self.applyVisualStyle()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -678,9 +669,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
           isDarkAppearance ? 0.18 : 0.22
         )
       } else {
-        fieldTintOverlayView.backgroundColor = UIColor.white.withAlphaComponent(
-          isDarkAppearance ? 0.04 : 0.08
-        )
+        fieldTintOverlayView.backgroundColor = .clear
       }
     } else if let customFieldBackgroundColor {
       fieldBackgroundView.isHidden = true
@@ -690,20 +679,23 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       glassHostingController?.view.isHidden = true
       fieldBackgroundView.isHidden = false
       fieldBackgroundView.effect = currentBlurEffect()
-      fieldTintOverlayView.backgroundColor = UIColor.secondarySystemFill.withAlphaComponent(
-        isDarkAppearance ? 0.18 : 0.28
-      )
+      fieldTintOverlayView.backgroundColor = .clear
     }
 
     textView.textColor = .label
     textView.tintColor = currentTint ?? container.tintColor
-    placeholderLabel.textColor = .placeholderText
+    placeholderLabel.textColor = customPlaceholderColor ?? themedPlaceholderColor()
     placeholderLabel.font = textView.font
-    clearButton.tintColor = .secondaryLabel
+    clearButton.tintColor = customPlaceholderColor ?? themedPlaceholderColor()
     clearButton.backgroundColor = .clear
     clearButton.layer.cornerRadius = 0
     cancelButton.tintColor = currentTint ?? container.tintColor
-    searchButton.tintColor = .secondaryLabel
+    cancelButton.setTitleColor(currentTint ?? container.tintColor, for: .normal)
+    cancelButton.setTitleColor(
+      (currentTint ?? container.tintColor).withAlphaComponent(0.6),
+      for: .disabled
+    )
+    searchButton.tintColor = customPlaceholderColor ?? themedPlaceholderColor()
     searchButton.backgroundColor = .clear
     searchButton.layer.cornerRadius = 0
     sendButton.tintColor = .white
@@ -728,6 +720,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       )
     }
     return UIBlurEffect(style: .extraLight)
+  }
+
+  private func themedPlaceholderColor() -> UIColor {
+    return UIColor.label.withAlphaComponent(isDarkAppearance ? 0.44 : 0.34)
   }
 
   private func applyTextInsets() {
@@ -760,7 +756,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       rootView: AnyView(
         IOSGlassInputBackground(
           cornerRadius: fieldCornerRadius,
-          accentColor: currentTint ?? container.tintColor,
           isDark: isDarkAppearance,
           isEnabled: controlEnabled
         )
@@ -785,7 +780,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     glassHostingController?.rootView = AnyView(
       IOSGlassInputBackground(
         cornerRadius: fieldCornerRadius,
-        accentColor: currentTint ?? container.tintColor,
         isDark: isDarkAppearance,
         isEnabled: controlEnabled
       )
