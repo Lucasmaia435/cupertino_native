@@ -143,6 +143,7 @@ class _CNTextFieldState extends State<CNTextField> {
   static const double _kAccessorySize = 32.0;
   static const double _kFieldHorizontalPadding = 16.0;
   static const double _kFieldVerticalPadding = 8.0;
+  static const double _kTextOpticalVerticalOffset = 1.5;
   static const double _kNativeMaxHeight = 240.0;
   static const double _kSendButtonOuterInset = 8.0;
   static const double _kSendButtonSizeBoost = 8.0;
@@ -174,30 +175,39 @@ class _CNTextFieldState extends State<CNTextField> {
   double? _lastMinimumHeight;
   String? _lastTraillingActionsSignature;
 
-  TextEditingController get _textController => widget.controller ?? _fallbackController;
+  TextEditingController get _textController =>
+      widget.controller ?? _fallbackController;
 
   FocusNode get _focusNode => widget.focusNode ?? _fallbackFocusNode;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
 
-  Color? get _effectiveTint => widget.tint ?? CupertinoTheme.of(context).primaryColor;
+  Color? get _effectiveTint =>
+      widget.tint ?? CupertinoTheme.of(context).primaryColor;
 
-  bool get _isNativePlatform => defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS;
+  bool get _isNativePlatform =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
 
-  bool get _canInteractWithTextInput => widget.enabled && _focusNode.canRequestFocus;
+  bool get _canInteractWithTextInput =>
+      widget.enabled && _focusNode.canRequestFocus;
 
   double get _minimumHeight {
     final min = defaultTargetPlatform == TargetPlatform.macOS ? 28.0 : 36.0;
     return widget.height.clamp(min, _kNativeMaxHeight).toDouble();
   }
 
-  double get _effectiveNativeHeight => (_reportedNativeHeight ?? _minimumHeight).clamp(_minimumHeight, _kNativeMaxHeight).toDouble();
+  double get _effectiveNativeHeight => (_reportedNativeHeight ?? _minimumHeight)
+      .clamp(_minimumHeight, _kNativeMaxHeight)
+      .toDouble();
 
   bool get _isSearchMode => widget._isSearch;
 
-  bool get _showsClearButton => _isSearchMode && widget.enabled && _textController.text.isNotEmpty;
+  bool get _showsClearButton =>
+      _isSearchMode && widget.enabled && _textController.text.isNotEmpty;
 
-  bool get _showsSendButton => !_isSearchMode && widget.enabled && _textController.text.isNotEmpty;
+  bool get _showsSendButton =>
+      !_isSearchMode && widget.enabled && _textController.text.isNotEmpty;
 
   bool get _showsActions {
     if (widget.actions.isEmpty) return false;
@@ -209,7 +219,8 @@ class _CNTextFieldState extends State<CNTextField> {
 
   int get _effectiveMaxLines => _isSearchMode ? 1 : _kAbsoluteMaxVisibleLines;
 
-  Color? get _effectiveSendButtonBackgroundColor => widget.sendButtonBackgroundColor ?? _effectiveTint;
+  Color? get _effectiveSendButtonBackgroundColor =>
+      widget.sendButtonBackgroundColor ?? _effectiveTint;
 
   @override
   void initState() {
@@ -354,7 +365,8 @@ class _CNTextFieldState extends State<CNTextField> {
     if (pendingHeight != null && (pendingHeight - resolved).abs() < 0.5) {
       return;
     }
-    if (pendingHeight == null && (currentReportedHeight - resolved).abs() < 0.5) {
+    if (pendingHeight == null &&
+        (currentReportedHeight - resolved).abs() < 0.5) {
       return;
     }
 
@@ -424,8 +436,14 @@ class _CNTextFieldState extends State<CNTextField> {
     _lastFocusEnabled = _canInteractWithTextInput;
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
-    _lastFieldBackground = resolveColorToArgb(widget.fieldBackgroundColor, context);
-    _lastSendButtonBackground = resolveColorToArgb(_effectiveSendButtonBackgroundColor, context);
+    _lastFieldBackground = resolveColorToArgb(
+      widget.fieldBackgroundColor,
+      context,
+    );
+    _lastSendButtonBackground = resolveColorToArgb(
+      _effectiveSendButtonBackgroundColor,
+      context,
+    );
     _lastMinimumHeight = _minimumHeight;
     _lastTraillingActionsSignature = _traillingActionsSignature(widget.actions);
   }
@@ -444,9 +462,14 @@ class _CNTextFieldState extends State<CNTextField> {
     final tint = resolveColorToArgb(_effectiveTint, context);
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
-    final sendButtonBackground = resolveColorToArgb(_effectiveSendButtonBackgroundColor, context);
+    final sendButtonBackground = resolveColorToArgb(
+      _effectiveSendButtonBackgroundColor,
+      context,
+    );
     final traillingActions = widget.actions;
-    final traillingActionsSignature = _traillingActionsSignature(traillingActions);
+    final traillingActionsSignature = _traillingActionsSignature(
+      traillingActions,
+    );
 
     if (_lastText != text) {
       await channel.invokeMethod('setText', {'text': text});
@@ -454,7 +477,9 @@ class _CNTextFieldState extends State<CNTextField> {
     }
 
     if (_lastPlaceholder != placeholder) {
-      await channel.invokeMethod('setPlaceholder', {'placeholder': placeholder});
+      await channel.invokeMethod('setPlaceholder', {
+        'placeholder': placeholder,
+      });
       _lastPlaceholder = placeholder;
     }
 
@@ -469,12 +494,18 @@ class _CNTextFieldState extends State<CNTextField> {
     }
 
     if (_lastShowsCancelButton != showsCancelButton) {
-      await channel.invokeMethod('setShowsCancelButton', {'showsCancelButton': showsCancelButton});
+      await channel.invokeMethod('setShowsCancelButton', {
+        'showsCancelButton': showsCancelButton,
+      });
       _lastShowsCancelButton = showsCancelButton;
     }
 
     if (_lastMinimumHeight != minimumHeight) {
-      await channel.invokeMethod('setMinHeight', {'minHeight': minimumHeight, 'maxHeight': _kNativeMaxHeight, 'maxVisibleLines': _effectiveMaxLines});
+      await channel.invokeMethod('setMinHeight', {
+        'minHeight': minimumHeight,
+        'maxHeight': _kNativeMaxHeight,
+        'maxVisibleLines': _effectiveMaxLines,
+      });
       _lastMinimumHeight = minimumHeight;
       if ((_reportedNativeHeight ?? 0) < minimumHeight && mounted) {
         setState(() {
@@ -484,7 +515,9 @@ class _CNTextFieldState extends State<CNTextField> {
     }
 
     if (_lastFocusEnabled != focusEnabled) {
-      await channel.invokeMethod('setFocusEnabled', {'focusEnabled': focusEnabled});
+      await channel.invokeMethod('setFocusEnabled', {
+        'focusEnabled': focusEnabled,
+      });
       _lastFocusEnabled = focusEnabled;
       if (!focusEnabled) {
         await channel.invokeMethod('unfocus');
@@ -492,7 +525,9 @@ class _CNTextFieldState extends State<CNTextField> {
     }
 
     if (_lastTraillingActionsSignature != traillingActionsSignature) {
-      await channel.invokeMethod('setTrailingActions', {'traillingActions': _encodeTraillingActions(traillingActions)});
+      await channel.invokeMethod('setTrailingActions', {
+        'traillingActions': _encodeTraillingActions(traillingActions),
+      });
       _lastTraillingActionsSignature = traillingActionsSignature;
     }
 
@@ -526,7 +561,10 @@ class _CNTextFieldState extends State<CNTextField> {
     final tint = resolveColorToArgb(_effectiveTint, context);
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
-    final sendButtonBackground = resolveColorToArgb(_effectiveSendButtonBackgroundColor, context);
+    final sendButtonBackground = resolveColorToArgb(
+      _effectiveSendButtonBackgroundColor,
+      context,
+    );
 
     if (_lastIsDark != isDark) {
       await channel.invokeMethod('setBrightness', {'isDark': isDark});
@@ -641,15 +679,37 @@ class _CNTextFieldState extends State<CNTextField> {
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
         ..addAll({
-          if (widget.backgroundColor != null) 'backgroundColor': resolveColorToArgb(widget.backgroundColor, context),
-          if (widget.fieldBackgroundColor != null) 'fieldBackgroundColor': resolveColorToArgb(widget.fieldBackgroundColor, context),
-          if (_effectiveSendButtonBackgroundColor != null) 'sendButtonBackgroundColor': resolveColorToArgb(_effectiveSendButtonBackgroundColor, context),
+          if (widget.backgroundColor != null)
+            'backgroundColor': resolveColorToArgb(
+              widget.backgroundColor,
+              context,
+            ),
+          if (widget.fieldBackgroundColor != null)
+            'fieldBackgroundColor': resolveColorToArgb(
+              widget.fieldBackgroundColor,
+              context,
+            ),
+          if (_effectiveSendButtonBackgroundColor != null)
+            'sendButtonBackgroundColor': resolveColorToArgb(
+              _effectiveSendButtonBackgroundColor,
+              context,
+            ),
         }),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
-        ? UiKitView(viewType: 'CupertinoNativeSearchBar', creationParamsCodec: const StandardMessageCodec(), creationParams: creationParams, onPlatformViewCreated: _onPlatformViewCreated)
-        : AppKitView(viewType: 'CupertinoNativeSearchBar', creationParamsCodec: const StandardMessageCodec(), creationParams: creationParams, onPlatformViewCreated: _onPlatformViewCreated);
+        ? UiKitView(
+            viewType: 'CupertinoNativeSearchBar',
+            creationParamsCodec: const StandardMessageCodec(),
+            creationParams: creationParams,
+            onPlatformViewCreated: _onPlatformViewCreated,
+          )
+        : AppKitView(
+            viewType: 'CupertinoNativeSearchBar',
+            creationParamsCodec: const StandardMessageCodec(),
+            creationParams: creationParams,
+            onPlatformViewCreated: _onPlatformViewCreated,
+          );
 
     return Focus(
       focusNode: _focusNode,
@@ -668,7 +728,8 @@ class _CNTextFieldState extends State<CNTextField> {
   Widget _buildFallback(BuildContext context) {
     final theme = CupertinoTheme.of(context);
     final effectiveTint = widget.tint ?? theme.primaryColor;
-    final canInteractWithTextInput = widget.enabled && _focusNode.canRequestFocus;
+    final canInteractWithTextInput =
+        widget.enabled && _focusNode.canRequestFocus;
 
     if (!canInteractWithTextInput && _focusNode.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -678,39 +739,102 @@ class _CNTextFieldState extends State<CNTextField> {
       });
     }
 
-    final resolvedFieldBackground = CupertinoDynamicColor.resolve(widget.fieldBackgroundColor ?? CupertinoColors.systemGrey5, context);
-    final resolvedPlaceholderColor = CupertinoDynamicColor.resolve(CupertinoColors.placeholderText, context);
-    final resolvedSecondaryLabel = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final resolvedSendButtonBackground = CupertinoDynamicColor.resolve(_effectiveSendButtonBackgroundColor ?? effectiveTint, context);
+    final resolvedFieldBackground = CupertinoDynamicColor.resolve(
+      widget.fieldBackgroundColor ?? CupertinoColors.systemGrey5,
+      context,
+    );
+    final resolvedPlaceholderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.placeholderText,
+      context,
+    );
+    final resolvedSecondaryLabel = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final resolvedSendButtonBackground = CupertinoDynamicColor.resolve(
+      _effectiveSendButtonBackgroundColor ?? effectiveTint,
+      context,
+    );
 
-    final textStyle = theme.textTheme.textStyle.copyWith(fontSize: 17, height: 1.25);
-    final strutStyle = StrutStyle(fontSize: textStyle.fontSize, height: textStyle.height, forceStrutHeight: true);
+    final textStyle = theme.textTheme.textStyle.copyWith(
+      fontSize: 17,
+      height: 1.25,
+    );
+    final strutStyle = StrutStyle(
+      fontSize: textStyle.fontSize,
+      height: textStyle.height,
+      forceStrutHeight: true,
+    );
     final lineHeight = (textStyle.fontSize ?? 17) * (textStyle.height ?? 1.0);
     final minimumResolvedHeight = math.max(36.0, widget.height);
-    final effectiveTextVerticalPadding = math.max(_kFieldVerticalPadding, (minimumResolvedHeight - lineHeight) / 2);
-    final firstLineIconTopPadding = math.max(0.0, effectiveTextVerticalPadding + (lineHeight / 2) - (_kAccessorySize / 2));
-    final minFieldHeight = math.max(36.0, math.max(widget.height, _fieldHeightForLines(lineHeight, 1, effectiveTextVerticalPadding))).toDouble();
-    final maxFieldHeight = math.max(minFieldHeight, _fieldHeightForLines(lineHeight, _effectiveMaxLines, effectiveTextVerticalPadding)).toDouble();
+    final effectiveTextVerticalPadding = math.max(
+      _kFieldVerticalPadding,
+      (minimumResolvedHeight - lineHeight) / 2,
+    );
+    final effectiveTextTopPadding =
+        effectiveTextVerticalPadding + _kTextOpticalVerticalOffset;
+    final effectiveTextBottomPadding = math.max(
+      0.0,
+      effectiveTextVerticalPadding - _kTextOpticalVerticalOffset,
+    );
+    final minFieldHeight = math
+        .max(
+          36.0,
+          math.max(
+            widget.height,
+            _fieldHeightForLines(lineHeight, 1, effectiveTextVerticalPadding),
+          ),
+        )
+        .toDouble();
+    final maxFieldHeight = math
+        .max(
+          minFieldHeight,
+          _fieldHeightForLines(
+            lineHeight,
+            _effectiveMaxLines,
+            effectiveTextVerticalPadding,
+          ),
+        )
+        .toDouble();
 
     final actionWidgets = widget.actions
         .take(2)
-        .map(
-          (action) => _AccessoryButton(
+        .map((action) {
+          final resolvedActionIconSize = _resolvedActionIconSize(
+            action.icon.size,
+          );
+          return _AccessoryButton(
             onPressed: widget.enabled ? action.onPressed : null,
-            child: IconTheme.merge(
-              data: IconThemeData(color: action.icon.color ?? effectiveTint, size: action.icon.size ?? 18),
-              child: action.icon,
+            child: SizedBox.square(
+              dimension: resolvedActionIconSize,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: IconTheme.merge(
+                  data: IconThemeData(
+                    color: action.icon.color ?? effectiveTint,
+                    size: resolvedActionIconSize,
+                  ),
+                  child: action.icon,
+                ),
+              ),
             ),
-          ),
-        )
+          );
+        })
         .toList(growable: false);
 
-    final textInputAction = _isSearchMode ? TextInputAction.search : TextInputAction.newline;
-    final keyboardType = _isSearchMode ? TextInputType.text : TextInputType.multiline;
+    final textInputAction = _isSearchMode
+        ? TextInputAction.search
+        : TextInputAction.newline;
+    final keyboardType = _isSearchMode
+        ? TextInputType.text
+        : TextInputType.multiline;
 
     final textField = LayoutBuilder(
       builder: (context, constraints) {
-        final sendButtonDiameter = math.max(0.0, minFieldHeight - (_kSendButtonOuterInset * 2) + _kSendButtonSizeBoost);
+        final sendButtonDiameter = math.max(
+          0.0,
+          minFieldHeight - (_kSendButtonOuterInset * 2) + _kSendButtonSizeBoost,
+        );
 
         Widget? trailingAccessory;
         if (_isSearchMode) {
@@ -718,54 +842,106 @@ class _CNTextFieldState extends State<CNTextField> {
             trailingAccessory = _AccessoryButton(
               onPressed: _clearText,
               foregroundColor: resolvedSecondaryLabel,
-              child: Icon(CupertinoIcons.clear_thick_circled, size: 18, color: resolvedSecondaryLabel),
+              child: Icon(
+                CupertinoIcons.clear_thick_circled,
+                size: 18,
+                color: resolvedSecondaryLabel,
+              ),
             );
           } else if (_showsActions) {
-            trailingAccessory = Row(mainAxisSize: MainAxisSize.min, children: actionWidgets);
+            trailingAccessory = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: actionWidgets,
+            );
           }
         } else if (_showsSendButton) {
-          trailingAccessory = _SendButton(diameter: sendButtonDiameter, backgroundColor: resolvedSendButtonBackground, onPressed: widget.enabled ? _handleSubmitPressed : null);
+          trailingAccessory = _SendButton(
+            diameter: sendButtonDiameter,
+            backgroundColor: resolvedSendButtonBackground,
+            onPressed: widget.enabled ? _handleSubmitPressed : null,
+          );
         } else if (_showsActions) {
-          trailingAccessory = Row(mainAxisSize: MainAxisSize.min, children: actionWidgets);
+          trailingAccessory = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: actionWidgets,
+          );
         }
 
-        final showsCenteredSendButton = _showsSendButton && _textFitsOnSingleLine(maxWidth: constraints.maxWidth, minFieldHeight: minFieldHeight, textStyle: textStyle, strutStyle: strutStyle);
-        final alignsTrailingAccessoryToTextCenter = _isSearchMode || !_showsSendButton;
-        final fieldCrossAxisAlignment = showsCenteredSendButton ? CrossAxisAlignment.center : (alignsTrailingAccessoryToTextCenter ? CrossAxisAlignment.start : CrossAxisAlignment.end);
-        final accessoryTopPadding = showsCenteredSendButton ? 0.0 : (alignsTrailingAccessoryToTextCenter ? firstLineIconTopPadding : 0.0);
-        final accessoryBottomPadding = _showsSendButton && !showsCenteredSendButton ? _kSendButtonOuterInset : 0.0;
-        final accessoryEndPadding = _showsSendButton ? _kSendButtonOuterInset : _kFieldHorizontalPadding - 2;
+        final showsCenteredSendButton =
+            _showsSendButton &&
+            _textFitsOnSingleLine(
+              maxWidth: constraints.maxWidth,
+              minFieldHeight: minFieldHeight,
+              textStyle: textStyle,
+              strutStyle: strutStyle,
+            );
+        final showsBottomAlignedSendButton =
+            _showsSendButton && !showsCenteredSendButton;
+        final fieldCrossAxisAlignment = showsBottomAlignedSendButton
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.center;
+        final accessoryBottomPadding = showsBottomAlignedSendButton
+            ? _kSendButtonOuterInset
+            : 0.0;
+        final accessoryEndPadding = _showsSendButton
+            ? _kSendButtonOuterInset
+            : _kFieldHorizontalPadding - 2;
 
         return AnimatedSize(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
           alignment: Alignment.bottomCenter,
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: minFieldHeight, maxHeight: maxFieldHeight),
+            constraints: BoxConstraints(
+              minHeight: minFieldHeight,
+              maxHeight: maxFieldHeight,
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(_kBorderRadius),
               child: DecoratedBox(
-                decoration: BoxDecoration(color: resolvedFieldBackground, borderRadius: BorderRadius.circular(_kBorderRadius)),
+                decoration: BoxDecoration(
+                  color: resolvedFieldBackground,
+                  borderRadius: BorderRadius.circular(_kBorderRadius),
+                ),
                 child: Row(
                   crossAxisAlignment: fieldCrossAxisAlignment,
                   children: [
                     if (_isSearchMode)
                       Padding(
-                        padding: EdgeInsetsDirectional.only(start: _kFieldHorizontalPadding - 4, top: firstLineIconTopPadding, end: 4),
-                        child: _AccessoryButton(onPressed: widget.enabled ? _handleSubmitPressed : null, foregroundColor: resolvedSecondaryLabel, child: const Icon(CupertinoIcons.search, size: 18)),
+                        padding: const EdgeInsetsDirectional.only(
+                          start: _kFieldHorizontalPadding - 4,
+                          end: 4,
+                        ),
+                        child: _AccessoryButton(
+                          onPressed: widget.enabled
+                              ? _handleSubmitPressed
+                              : null,
+                          foregroundColor: resolvedSecondaryLabel,
+                          child: const Icon(CupertinoIcons.search, size: 18),
+                        ),
                       ),
                     Expanded(
                       child: CupertinoTheme(
                         data: theme.copyWith(primaryColor: effectiveTint),
                         child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                          behavior: ScrollConfiguration.of(
+                            context,
+                          ).copyWith(scrollbars: false),
                           child: CupertinoTextField.borderless(
                             controller: _textController,
                             focusNode: _focusNode,
                             autofocus: widget.autofocus,
                             enabled: widget.enabled,
-                            enableInteractiveSelection: canInteractWithTextInput,
-                            padding: EdgeInsetsDirectional.only(start: _isSearchMode ? 0 : _kFieldHorizontalPadding, end: 4, top: effectiveTextVerticalPadding, bottom: effectiveTextVerticalPadding),
+                            enableInteractiveSelection:
+                                canInteractWithTextInput,
+                            padding: EdgeInsetsDirectional.only(
+                              start: _isSearchMode
+                                  ? 0
+                                  : _kFieldHorizontalPadding,
+                              end: 4,
+                              top: effectiveTextTopPadding,
+                              bottom: effectiveTextBottomPadding,
+                            ),
                             minLines: 1,
                             maxLines: _isSearchMode ? 1 : null,
                             keyboardType: keyboardType,
@@ -773,7 +949,9 @@ class _CNTextFieldState extends State<CNTextField> {
                             style: textStyle,
                             strutStyle: strutStyle,
                             placeholder: widget.placeholder,
-                            placeholderStyle: textStyle.copyWith(color: resolvedPlaceholderColor),
+                            placeholderStyle: textStyle.copyWith(
+                              color: resolvedPlaceholderColor,
+                            ),
                             cursorColor: effectiveTint,
                             onTap: widget.onTap,
                             onChanged: widget.onChanged,
@@ -782,10 +960,15 @@ class _CNTextFieldState extends State<CNTextField> {
                               if (!canInteractWithTextInput) {
                                 return const SizedBox.shrink();
                               }
-                              if (defaultTargetPlatform == TargetPlatform.iOS && SystemContextMenu.isSupported(context)) {
-                                return SystemContextMenu.editableText(editableTextState: editableTextState);
+                              if (defaultTargetPlatform == TargetPlatform.iOS &&
+                                  SystemContextMenu.isSupported(context)) {
+                                return SystemContextMenu.editableText(
+                                  editableTextState: editableTextState,
+                                );
                               }
-                              return CupertinoAdaptiveTextSelectionToolbar.editableText(editableTextState: editableTextState);
+                              return CupertinoAdaptiveTextSelectionToolbar.editableText(
+                                editableTextState: editableTextState,
+                              );
                             },
                           ),
                         ),
@@ -793,7 +976,11 @@ class _CNTextFieldState extends State<CNTextField> {
                     ),
                     if (trailingAccessory != null)
                       Padding(
-                        padding: EdgeInsetsDirectional.only(start: 4, end: accessoryEndPadding, top: accessoryTopPadding, bottom: accessoryBottomPadding),
+                        padding: EdgeInsetsDirectional.only(
+                          start: 4,
+                          end: accessoryEndPadding,
+                          bottom: accessoryBottomPadding,
+                        ),
                         child: trailingAccessory,
                       ),
                   ],
@@ -813,7 +1000,12 @@ class _CNTextFieldState extends State<CNTextField> {
           const SizedBox(width: 8),
           CupertinoTheme(
             data: theme.copyWith(primaryColor: effectiveTint),
-            child: CupertinoButton(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0), minimumSize: const Size(28, 28), onPressed: widget.enabled ? _handleCancelPressed : null, child: const Text('Cancel')),
+            child: CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+              minimumSize: const Size(28, 28),
+              onPressed: widget.enabled ? _handleCancelPressed : null,
+              child: const Text('Cancel'),
+            ),
           ),
         ],
       ],
@@ -821,12 +1013,22 @@ class _CNTextFieldState extends State<CNTextField> {
 
     if (widget.backgroundColor != null) {
       content = DecoratedBox(
-        decoration: BoxDecoration(color: CupertinoDynamicColor.resolve(widget.backgroundColor!, context), borderRadius: BorderRadius.circular(_kBorderRadius)),
+        decoration: BoxDecoration(
+          color: CupertinoDynamicColor.resolve(
+            widget.backgroundColor!,
+            context,
+          ),
+          borderRadius: BorderRadius.circular(_kBorderRadius),
+        ),
         child: Padding(padding: const EdgeInsets.all(4), child: content),
       );
     }
 
-    return AnimatedOpacity(duration: const Duration(milliseconds: 180), opacity: widget.enabled ? 1 : 0.6, child: content);
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: widget.enabled ? 1 : 0.6,
+      child: content,
+    );
   }
 
   void _clearText() {
@@ -845,11 +1047,25 @@ class _CNTextFieldState extends State<CNTextField> {
     widget.onSubmitted?.call(_textController.text);
   }
 
-  double _fieldHeightForLines(double lineHeight, int lines, double verticalPadding) {
+  double _fieldHeightForLines(
+    double lineHeight,
+    int lines,
+    double verticalPadding,
+  ) {
     return lineHeight * lines + (verticalPadding * 2);
   }
 
-  bool _textFitsOnSingleLine({required double maxWidth, required double minFieldHeight, required TextStyle textStyle, required StrutStyle strutStyle}) {
+  double _resolvedActionIconSize(double? requestedSize) {
+    final baseSize = requestedSize ?? 16.0;
+    return baseSize.clamp(12.0, 17.0).toDouble();
+  }
+
+  bool _textFitsOnSingleLine({
+    required double maxWidth,
+    required double minFieldHeight,
+    required TextStyle textStyle,
+    required StrutStyle strutStyle,
+  }) {
     if (_isSearchMode || !_showsSendButton) {
       return false;
     }
@@ -863,10 +1079,16 @@ class _CNTextFieldState extends State<CNTextField> {
       return true;
     }
 
-    final trailingWidth = math.max(0.0, minFieldHeight - (_kSendButtonOuterInset * 2) + _kSendButtonSizeBoost) + 12.0;
+    final trailingWidth =
+        math.max(
+          0.0,
+          minFieldHeight - (_kSendButtonOuterInset * 2) + _kSendButtonSizeBoost,
+        ) +
+        12.0;
     final textStartPadding = _kFieldHorizontalPadding;
     final textEndPadding = 4.0;
-    final availableTextWidth = maxWidth - textStartPadding - textEndPadding - trailingWidth;
+    final availableTextWidth =
+        maxWidth - textStartPadding - textEndPadding - trailingWidth;
     if (availableTextWidth <= 0) {
       return false;
     }
@@ -882,7 +1104,9 @@ class _CNTextFieldState extends State<CNTextField> {
     return !painter.didExceedMaxLines;
   }
 
-  List<Map<String, dynamic>> _encodeTraillingActions(List<CNTextFieldAction> actions) {
+  List<Map<String, dynamic>> _encodeTraillingActions(
+    List<CNTextFieldAction> actions,
+  ) {
     return actions
         .take(2)
         .map((action) {
@@ -928,7 +1152,11 @@ class _CNTextFieldState extends State<CNTextField> {
 }
 
 class _AccessoryButton extends StatelessWidget {
-  const _AccessoryButton({required this.onPressed, required this.child, this.foregroundColor});
+  const _AccessoryButton({
+    required this.onPressed,
+    required this.child,
+    this.foregroundColor,
+  });
 
   final VoidCallback? onPressed;
   final Widget child;
@@ -944,12 +1172,21 @@ class _AccessoryButton extends StatelessWidget {
       ),
     );
 
-    return CupertinoButton(padding: EdgeInsets.zero, minimumSize: const Size.square(_CNTextFieldState._kAccessorySize), onPressed: onPressed, child: buttonChild);
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size.square(_CNTextFieldState._kAccessorySize),
+      onPressed: onPressed,
+      child: buttonChild,
+    );
   }
 }
 
 class _SendButton extends StatelessWidget {
-  const _SendButton({required this.diameter, required this.backgroundColor, required this.onPressed});
+  const _SendButton({
+    required this.diameter,
+    required this.backgroundColor,
+    required this.onPressed,
+  });
 
   static const double _kIconSize = 16.0;
 
@@ -967,9 +1204,16 @@ class _SendButton extends StatelessWidget {
         minimumSize: Size.zero,
         onPressed: onPressed,
         child: DecoratedBox(
-          decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            shape: BoxShape.circle,
+          ),
           child: const Center(
-            child: Icon(CupertinoIcons.arrow_up, color: CupertinoColors.white, size: _kIconSize),
+            child: Icon(
+              CupertinoIcons.arrow_up,
+              color: CupertinoColors.white,
+              size: _kIconSize,
+            ),
           ),
         ),
       ),

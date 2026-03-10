@@ -83,7 +83,8 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private let cancelButton: NSButton
   private var glassHostingView: NSHostingView<AnyView>?
   private var leadingSearchWidthConstraint: NSLayoutConstraint!
-  private var searchButtonFirstLineCenterYConstraint: NSLayoutConstraint!
+  private var searchButtonCenterYConstraint: NSLayoutConstraint!
+  private var scrollViewTopConstraint: NSLayoutConstraint!
   private var trailingButtonsFirstLineCenterYConstraint: NSLayoutConstraint!
   private var trailingButtonsCenterYConstraint: NSLayoutConstraint!
   private var trailingButtonsTrailingConstraint: NSLayoutConstraint!
@@ -111,6 +112,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
   private let compactHorizontalPadding: CGFloat = 16
   private let compactVerticalPadding: CGFloat = 8
+  private let textOpticalVerticalOffset: CGFloat = 1.5
   private let fieldCornerRadius: CGFloat = 28
   private let accessoryButtonSize: CGFloat = 32
   private let sendButtonOuterInset: CGFloat = 8
@@ -310,10 +312,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
     leadingSearchWidthConstraint = searchButton.widthAnchor.constraint(equalToConstant: accessoryButtonSize)
     let firstLineCenterOffset = currentFirstLineCenterOffset()
-    searchButtonFirstLineCenterYConstraint = searchButton.centerYAnchor.constraint(
-      equalTo: scrollView.topAnchor,
-      constant: firstLineCenterOffset
-    )
+    searchButtonCenterYConstraint = searchButton.centerYAnchor.constraint(equalTo: fieldClipView.centerYAnchor)
     trailingButtonsFirstLineCenterYConstraint = trailingButtonsStack.centerYAnchor.constraint(
       equalTo: scrollView.topAnchor,
       constant: firstLineCenterOffset
@@ -328,6 +327,10 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     trailingButtonsBottomConstraint = trailingButtonsStack.bottomAnchor.constraint(
       equalTo: fieldClipView.bottomAnchor,
       constant: -(compactVerticalPadding - 2)
+    )
+    scrollViewTopConstraint = scrollView.topAnchor.constraint(
+      equalTo: fieldClipView.topAnchor,
+      constant: textOpticalVerticalOffset
     )
     placeholderTopConstraint = placeholderLabel.centerYAnchor.constraint(
       equalTo: scrollView.topAnchor,
@@ -358,7 +361,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
 
       searchButton.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor, constant: compactHorizontalPadding - 4),
-      searchButtonFirstLineCenterYConstraint,
+      searchButtonCenterYConstraint,
       searchButton.heightAnchor.constraint(equalToConstant: accessoryButtonSize),
       leadingSearchWidthConstraint,
 
@@ -368,7 +371,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
       scrollView.leadingAnchor.constraint(equalTo: searchButton.trailingAnchor, constant: 4),
       scrollView.trailingAnchor.constraint(equalTo: trailingButtonsStack.leadingAnchor, constant: -8),
-      scrollView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      scrollViewTopConstraint,
       scrollView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
 
       placeholderLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
@@ -644,7 +647,6 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private func applyMode(_ isSearch: Bool) {
     isSearchMode = isSearch
     leadingSearchWidthConstraint.constant = isSearch ? accessoryButtonSize : 0
-    searchButtonFirstLineCenterYConstraint.isActive = isSearch
     updateTrailingAccessoryAlignment()
     refreshAccessoryButtons()
     needsLayout = true
@@ -757,9 +759,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       currentFieldHeight ?? (lastReportedHeight > 0 ? lastReportedHeight : requestedMinHeight)
     )
     let centersSendButton = showsSendButton && resolvedFieldHeight <= requestedMinHeight + 0.5
-    let alignsToTextCenter = isSearchMode || !resolvedHasText
-    trailingButtonsFirstLineCenterYConstraint.isActive = alignsToTextCenter
-    trailingButtonsCenterYConstraint.isActive = centersSendButton
+    let alignsToFieldCenter = isSearchMode || !resolvedHasText || centersSendButton
+    trailingButtonsFirstLineCenterYConstraint.isActive = false
+    trailingButtonsCenterYConstraint.isActive = alignsToFieldCenter
     trailingButtonsBottomConstraint.isActive = showsSendButton && !centersSendButton
     trailingButtonsTrailingConstraint.constant = showsSendButton ? -sendButtonOuterInset : -(compactHorizontalPadding - 2)
     trailingButtonsBottomConstraint.constant = -sendButtonOuterInset
@@ -786,7 +788,6 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     let verticalInset = max(compactVerticalPadding - 2, centeredInset)
     textView.textContainerInset = NSSize(width: 0, height: verticalInset)
     let firstLineCenterOffset = verticalInset + (lineHeight / 2.0)
-    searchButtonFirstLineCenterYConstraint?.constant = firstLineCenterOffset
     trailingButtonsFirstLineCenterYConstraint?.constant = firstLineCenterOffset
     placeholderTopConstraint?.constant = firstLineCenterOffset
   }
@@ -975,7 +976,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   }
 
   private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
-    return min(128, max(12, action.iconDataSize))
+    return min(17, max(12, action.iconDataSize))
   }
 
   private static func iconImage(
