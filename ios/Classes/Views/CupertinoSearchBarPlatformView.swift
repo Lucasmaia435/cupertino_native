@@ -1,8 +1,9 @@
 import Flutter
+import SwiftUI
 import UIKit
 import CoreText
 
-private final class LayoutAwareSearchBar: UISearchBar {
+private final class LayoutAwareSearchContainerView: UIView {
   var onLayout: (() -> Void)?
 
   override func layoutSubviews() {
@@ -11,7 +12,46 @@ private final class LayoutAwareSearchBar: UISearchBar {
   }
 }
 
-class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBarDelegate {
+@available(iOS 26.0, *)
+private struct IOSGlassInputBackground: View {
+  let cornerRadius: CGFloat
+  let accentColor: UIColor
+  let isDark: Bool
+  let isEnabled: Bool
+
+  var body: some View {
+    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    shape
+      .fill(Color.clear)
+      .glassEffect(.regular, in: shape)
+      .overlay(
+        shape.stroke(
+          Color.white.opacity(isDark ? 0.18 : 0.34),
+          lineWidth: 1
+        )
+      )
+      .overlay {
+        shape.fill(
+          LinearGradient(
+            colors: [
+              Color.white.opacity(isDark ? 0.14 : 0.22),
+              Color.white.opacity(isDark ? 0.04 : 0.08),
+              Color.clear,
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+      }
+      .overlay {
+        shape.fill(Color(uiColor: accentColor).opacity(isDark ? 0.04 : 0.06))
+      }
+      .opacity(isEnabled ? 1.0 : 0.9)
+      .allowsHitTesting(false)
+  }
+}
+
+class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewDelegate {
   private struct FlutterFontManifestEntry {
     let family: String
     let assets: [String]
@@ -34,44 +74,110 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
   private static var cachedFontManifest: [FlutterFontManifestEntry]?
 
   private let channel: FlutterMethodChannel
-  private let container: UIView
-  private let searchBar: LayoutAwareSearchBar
+  private let container: LayoutAwareSearchContainerView
+  private let fieldClipView: UIView
+  private let fieldBackgroundView: UIVisualEffectView
+  private let fieldTintOverlayView: UIView
+  private let textView: UITextView
+  private let placeholderLabel: UILabel
+  private let trailingStackView: UIStackView
+  private let clearButton: UIButton
   private let trailingButtons: [UIButton]
-  private var trailingButtonsEnabled: [Bool] = [false, false]
+  private let sendButton: UIButton
+  private let searchButton: UIButton
+  private let cancelButton: UIButton
+  private var glassHostingController: UIHostingController<AnyView>?
+  private var leadingSearchWidthConstraint: NSLayoutConstraint!
+  private var searchButtonFirstLineCenterYConstraint: NSLayoutConstraint!
+  private var trailingStackFirstLineCenterYConstraint: NSLayoutConstraint!
+  private var trailingStackCenterYConstraint: NSLayoutConstraint!
+  private var trailingStackTrailingConstraint: NSLayoutConstraint!
+  private var trailingStackBottomConstraint: NSLayoutConstraint!
+  private var sendButtonWidthConstraint: NSLayoutConstraint!
+  private var sendButtonHeightConstraint: NSLayoutConstraint!
+  private var placeholderTopConstraint: NSLayoutConstraint!
+  private var fieldTrailingConstraintToContainer: NSLayoutConstraint!
+  private var fieldTrailingConstraintToCancel: NSLayoutConstraint!
   private var currentTrailingActions: [TrailingAction] = []
-  private var isInstallingTrailingButtons = false
-  private var requestedHeight: CGFloat = 56
+  private var trailingButtonsEnabled: [Bool] = [false, false]
+  private var currentTint: UIColor?
+  private var customBackgroundColor: UIColor?
+  private var customFieldBackgroundColor: UIColor?
+  private var customSendButtonBackgroundColor: UIColor?
+  private var controlEnabled = true
+  private var focusEnabled = true
+  private var isSearchMode = true
+  private var showsCancelButton = false
+  private var requestedMinHeight: CGFloat = 44
+  private var requestedMaxHeight: CGFloat = 240
+  private var maxVisibleLines = 1
+  private var lastReportedHeight: CGFloat = 0
+  private var isDarkAppearance = false
+  private var isApplyingProgrammaticText = false
 
+  private let compactHorizontalPadding: CGFloat = 16
+  private let compactVerticalPadding: CGFloat = 8
+  private let fieldCornerRadius: CGFloat = 28
+  private let accessoryButtonSize: CGFloat = 32
+  private let sendButtonOuterInset: CGFloat = 8
+  private let sendButtonContentInset: CGFloat = 4
+  private let sendButtonIconSize: CGFloat = 16
+  private let sendButtonDiameterBoost: CGFloat = 8
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
+    let clearButton = UIButton(type: .system)
     let firstTrailingButton = UIButton(type: .system)
     let secondTrailingButton = UIButton(type: .system)
+    let sendButton = UIButton(type: .system)
+    let searchButton = UIButton(type: .system)
+    let cancelButton = UIButton(type: .system)
     self.channel = FlutterMethodChannel(name: "CupertinoNativeSearchBar_\(viewId)", binaryMessenger: messenger)
-    self.container = UIView(frame: frame)
-    self.searchBar = LayoutAwareSearchBar(frame: .zero)
+    self.container = LayoutAwareSearchContainerView(frame: frame)
+    self.fieldClipView = UIView(frame: .zero)
+    self.fieldBackgroundView = UIVisualEffectView(effect: nil)
+    self.fieldTintOverlayView = UIView(frame: .zero)
+    self.textView = UITextView(frame: .zero)
+    self.placeholderLabel = UILabel(frame: .zero)
+    self.trailingStackView = UIStackView(arrangedSubviews: [clearButton, firstTrailingButton, secondTrailingButton, sendButton])
+    self.clearButton = clearButton
     self.trailingButtons = [firstTrailingButton, secondTrailingButton]
+    self.sendButton = sendButton
+    self.searchButton = searchButton
+    self.cancelButton = cancelButton
 
     var text: String = ""
     var placeholder: String? = nil
     var enabled: Bool = true
+    var isSearchMode: Bool = true
     var showsCancelButton: Bool = false
-    var height: CGFloat = 56
+    var minHeight: CGFloat = 44
+    var maxHeight: CGFloat = 240
+    var maxVisibleLines: Int = 1
+    var focusEnabled: Bool = true
     var isDark: Bool = false
     var tint: UIColor? = nil
     var bg: UIColor? = nil
     var fieldBg: UIColor? = nil
+    var sendButtonBg: UIColor? = nil
     var trailingActions: [TrailingAction] = []
 
     if let dict = args as? [String: Any] {
       if let value = dict["text"] as? String { text = value }
       if let value = dict["placeholder"] as? String { placeholder = value }
       if let value = dict["enabled"] as? NSNumber { enabled = value.boolValue }
+      if let value = dict["isSearch"] as? NSNumber { isSearchMode = value.boolValue }
       if let value = dict["showsCancelButton"] as? NSNumber { showsCancelButton = value.boolValue }
-      if let value = dict["height"] as? NSNumber { height = CGFloat(truncating: value) }
+      if let value = dict["minHeight"] as? NSNumber { minHeight = CGFloat(truncating: value) }
+      if let value = dict["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
+      if let value = dict["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
+      if let value = dict["focusEnabled"] as? NSNumber { focusEnabled = value.boolValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let style = dict["style"] as? [String: Any] {
         if let value = style["tint"] as? NSNumber { tint = Self.colorFromARGB(value.intValue) }
         if let value = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(value.intValue) }
         if let value = style["fieldBackgroundColor"] as? NSNumber { fieldBg = Self.colorFromARGB(value.intValue) }
+        if let value = style["sendButtonBackgroundColor"] as? NSNumber {
+          sendButtonBg = Self.colorFromARGB(value.intValue)
+        }
       }
       trailingActions = Self.parseTrailingActions(dict["traillingActions"])
     }
@@ -82,65 +188,216 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     if #available(iOS 13.0, *) {
       container.overrideUserInterfaceStyle = isDark ? .dark : .light
     }
+    currentTint = tint
+    customBackgroundColor = bg
+    customFieldBackgroundColor = fieldBg
+    customSendButtonBackgroundColor = sendButtonBg
+    controlEnabled = enabled
+    self.focusEnabled = focusEnabled
+    self.isSearchMode = isSearchMode
+    self.showsCancelButton = showsCancelButton
+    requestedMinHeight = max(36, min(minHeight, maxHeight))
+    requestedMaxHeight = max(requestedMinHeight, min(maxHeight, 240))
+    self.maxVisibleLines = max(1, maxVisibleLines)
 
-    searchBar.translatesAutoresizingMaskIntoConstraints = false
-    searchBar.onLayout = { [weak self] in
-      guard let self else { return }
-      self.updateTextFieldAppearanceForHeight()
-      self.installTrailingButtonsInTextField()
+    container.onLayout = { [weak self] in
+      self?.refreshHeightAndNotifyIfNeeded()
     }
-    searchBar.delegate = self
-    searchBar.searchBarStyle = .minimal
-    searchBar.text = text
-    searchBar.placeholder = placeholder
-    searchBar.showsCancelButton = showsCancelButton
-    requestedHeight = max(32, min(height, 240))
+
+    fieldClipView.translatesAutoresizingMaskIntoConstraints = false
+    fieldClipView.clipsToBounds = true
+    fieldClipView.layer.cornerRadius = fieldCornerRadius
+    fieldClipView.layer.cornerCurve = .continuous
+
+    fieldBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+    fieldBackgroundView.isUserInteractionEnabled = false
+
+    fieldTintOverlayView.translatesAutoresizingMaskIntoConstraints = false
+    fieldTintOverlayView.isUserInteractionEnabled = false
+
+    textView.translatesAutoresizingMaskIntoConstraints = false
+    textView.delegate = self
+    textView.backgroundColor = .clear
+    textView.text = text
+    textView.font = UIFont.systemFont(ofSize: 17)
+    textView.isScrollEnabled = false
+    textView.showsVerticalScrollIndicator = false
+    textView.showsHorizontalScrollIndicator = false
+    textView.alwaysBounceVertical = false
+    textView.keyboardDismissMode = .interactive
+    textView.textContainer.lineFragmentPadding = 0
+    applyTextInsets()
+
+    placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+    placeholderLabel.text = placeholder
+    placeholderLabel.font = textView.font
+    placeholderLabel.numberOfLines = 1
+
+    trailingStackView.translatesAutoresizingMaskIntoConstraints = false
+    trailingStackView.axis = .horizontal
+    trailingStackView.alignment = .center
+    trailingStackView.distribution = .fill
+    trailingStackView.spacing = 6
+
+    configureAccessoryButton(clearButton, size: accessoryButtonSize)
+    clearButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+    clearButton.addTarget(self, action: #selector(onClearPressed), for: .touchUpInside)
+
     for (index, button) in trailingButtons.enumerated() {
+      configureAccessoryButton(button, size: accessoryButtonSize)
       button.tag = index
-      button.tintColor = tint ?? searchBar.tintColor
-      button.adjustsImageWhenHighlighted = true
-      button.imageView?.contentMode = .scaleAspectFit
-      button.isHidden = true
       button.addTarget(self, action: #selector(onTrailingPressed(_:)), for: .touchUpInside)
+      button.isHidden = true
     }
-    applyEnabled(enabled)
-    if let color = tint { searchBar.tintColor = color }
-    if let color = bg { searchBar.backgroundColor = color }
-    if let color = fieldBg { searchBar.searchTextField.backgroundColor = color }
-    applyHeight(height)
-    applyTrailingActions(trailingActions)
 
-    container.addSubview(searchBar)
-    NSLayoutConstraint.activate([
-      searchBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-      searchBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-      searchBar.topAnchor.constraint(equalTo: container.topAnchor),
-      searchBar.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-    ])
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      self.applyTrailingActions(self.currentTrailingActions)
+    let sendButtonSizeConstraints = configureAccessoryButton(
+      sendButton,
+      size: sendButtonDiameter(for: requestedMinHeight)
+    )
+    sendButtonWidthConstraint = sendButtonSizeConstraints.width
+    sendButtonHeightConstraint = sendButtonSizeConstraints.height
+    sendButton.setImage(UIImage(systemName: "arrow.up"), for: .normal)
+    sendButton.addTarget(self, action: #selector(onSendPressed), for: .touchUpInside)
+    if #available(iOS 13.0, *) {
+      sendButton.setPreferredSymbolConfiguration(
+        UIImage.SymbolConfiguration(pointSize: sendButtonIconSize, weight: .medium),
+        forImageIn: .normal
+      )
     }
+    if #available(iOS 15.0, *) {
+      var config = sendButton.configuration ?? UIButton.Configuration.plain()
+      config.contentInsets = NSDirectionalEdgeInsets(
+        top: sendButtonContentInset,
+        leading: sendButtonContentInset,
+        bottom: sendButtonContentInset,
+        trailing: sendButtonContentInset
+      )
+      sendButton.configuration = config
+    } else {
+      sendButton.contentEdgeInsets = UIEdgeInsets(
+        top: sendButtonContentInset,
+        left: sendButtonContentInset,
+        bottom: sendButtonContentInset,
+        right: sendButtonContentInset
+      )
+    }
+
+    configureAccessoryButton(searchButton, size: accessoryButtonSize)
+    searchButton.setImage(UIImage(systemName: "magnifyingglass"), for: .normal)
+    searchButton.addTarget(self, action: #selector(onSearchPressed), for: .touchUpInside)
+
+    cancelButton.translatesAutoresizingMaskIntoConstraints = false
+    cancelButton.setTitle("Cancel", for: .normal)
+    cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 17)
+    cancelButton.addTarget(self, action: #selector(onCancelPressed), for: .touchUpInside)
+    cancelButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+    cancelButton.setContentHuggingPriority(.required, for: .horizontal)
+
+    container.addSubview(fieldClipView)
+    container.addSubview(cancelButton)
+    fieldClipView.addSubview(fieldBackgroundView)
+    installGlassBackgroundIfNeeded()
+    fieldClipView.addSubview(fieldTintOverlayView)
+    fieldClipView.addSubview(searchButton)
+    fieldClipView.addSubview(textView)
+    fieldClipView.addSubview(placeholderLabel)
+    fieldClipView.addSubview(trailingStackView)
+
+    leadingSearchWidthConstraint = searchButton.widthAnchor.constraint(equalToConstant: accessoryButtonSize)
+    let firstLineCenterOffset = currentFirstLineCenterOffset()
+    searchButtonFirstLineCenterYConstraint = searchButton.centerYAnchor.constraint(
+      equalTo: textView.topAnchor,
+      constant: firstLineCenterOffset
+    )
+    trailingStackFirstLineCenterYConstraint = trailingStackView.centerYAnchor.constraint(
+      equalTo: textView.topAnchor,
+      constant: firstLineCenterOffset
+    )
+    trailingStackCenterYConstraint = trailingStackView.centerYAnchor.constraint(
+      equalTo: fieldClipView.centerYAnchor
+    )
+    trailingStackTrailingConstraint = trailingStackView.trailingAnchor.constraint(
+      equalTo: fieldClipView.trailingAnchor,
+      constant: -(compactHorizontalPadding - 2)
+    )
+    trailingStackBottomConstraint = trailingStackView.bottomAnchor.constraint(
+      equalTo: fieldClipView.bottomAnchor,
+      constant: -(compactVerticalPadding - 2)
+    )
+    placeholderTopConstraint = placeholderLabel.centerYAnchor.constraint(
+      equalTo: textView.topAnchor,
+      constant: firstLineCenterOffset
+    )
+    fieldTrailingConstraintToContainer = fieldClipView.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+    fieldTrailingConstraintToCancel = fieldClipView.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor, constant: -8)
+
+    NSLayoutConstraint.activate([
+      fieldClipView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      fieldClipView.topAnchor.constraint(equalTo: container.topAnchor),
+      fieldClipView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      fieldTrailingConstraintToContainer,
+
+      cancelButton.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      cancelButton.centerYAnchor.constraint(equalTo: fieldClipView.centerYAnchor),
+      cancelButton.topAnchor.constraint(greaterThanOrEqualTo: container.topAnchor),
+      cancelButton.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor),
+
+      fieldBackgroundView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
+      fieldBackgroundView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
+      fieldBackgroundView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      fieldBackgroundView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+
+      fieldTintOverlayView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
+      fieldTintOverlayView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
+      fieldTintOverlayView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+
+      searchButton.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor, constant: compactHorizontalPadding - 4),
+      searchButtonFirstLineCenterYConstraint,
+      searchButton.heightAnchor.constraint(equalToConstant: accessoryButtonSize),
+      leadingSearchWidthConstraint,
+
+      trailingStackTrailingConstraint,
+      trailingStackFirstLineCenterYConstraint,
+      trailingStackBottomConstraint,
+
+      textView.leadingAnchor.constraint(equalTo: searchButton.trailingAnchor, constant: 4),
+      textView.trailingAnchor.constraint(equalTo: trailingStackView.leadingAnchor, constant: -8),
+      textView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      textView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+
+      placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
+      placeholderLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingStackView.leadingAnchor, constant: -8),
+      placeholderTopConstraint,
+      placeholderLabel.bottomAnchor.constraint(lessThanOrEqualTo: fieldClipView.bottomAnchor),
+    ])
+
+    applyTrailingActions(trailingActions)
+    applyMode(isSearchMode)
+    applyShowsCancelButton(showsCancelButton)
+    applyFocusEnabled(focusEnabled)
+    applyEnabled(enabled)
+    applyPlaceholder(placeholder)
+    applyVisualStyle()
+    refreshAccessoryButtons()
+    refreshHeightAndNotifyIfNeeded(force: true)
 
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
       case "getIntrinsicSize":
-        let width = max(self.container.bounds.width, 320)
-        let size = self.searchBar.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        result(["width": Double(size.width), "height": Double(self.requestedHeight)])
+        result([
+          "width": Double(max(self.container.bounds.width, 0)),
+          "height": Double(self.lastReportedHeight == 0 ? self.requestedMinHeight : self.lastReportedHeight)
+        ])
       case "setText":
         if let params = call.arguments as? [String: Any], let value = params["text"] as? String {
-          self.searchBar.text = value
+          self.applyText(value)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing text", details: nil)) }
       case "setPlaceholder":
         if let params = call.arguments as? [String: Any] {
-          if params["placeholder"] is NSNull {
-            self.searchBar.placeholder = nil
-          } else {
-            self.searchBar.placeholder = params["placeholder"] as? String
-          }
+          self.applyPlaceholder(params["placeholder"] as? String)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing placeholder", details: nil)) }
       case "setEnabled":
@@ -148,16 +405,34 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
           self.applyEnabled(value)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing enabled", details: nil)) }
+      case "setMode":
+        if let params = call.arguments as? [String: Any], let value = (params["isSearch"] as? NSNumber)?.boolValue {
+          self.applyMode(value)
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing isSearch", details: nil)) }
       case "setShowsCancelButton":
         if let params = call.arguments as? [String: Any], let value = (params["showsCancelButton"] as? NSNumber)?.boolValue {
-          self.searchBar.setShowsCancelButton(value, animated: true)
+          self.applyShowsCancelButton(value)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing showsCancelButton", details: nil)) }
-      case "setHeight":
-        if let params = call.arguments as? [String: Any], let value = params["height"] as? NSNumber {
-          self.applyHeight(CGFloat(truncating: value))
+      case "setMinHeight":
+        if let params = call.arguments as? [String: Any],
+           let value = params["minHeight"] as? NSNumber {
+          let maxHeight = (params["maxHeight"] as? NSNumber).map { CGFloat(truncating: $0) }
+          let maxVisibleLines = (params["maxVisibleLines"] as? NSNumber)?.intValue
+          self.applyMinHeight(
+            CGFloat(truncating: value),
+            maxHeight: maxHeight,
+            maxVisibleLines: maxVisibleLines
+          )
           result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing height", details: nil)) }
+        } else { result(FlutterError(code: "bad_args", message: "Missing minHeight", details: nil)) }
+      case "setFocusEnabled":
+        if let params = call.arguments as? [String: Any],
+           let value = (params["focusEnabled"] as? NSNumber)?.boolValue {
+          self.applyFocusEnabled(value)
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing focusEnabled", details: nil)) }
       case "setTrailingActions":
         if let params = call.arguments as? [String: Any] {
           self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
@@ -166,15 +441,20 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       case "setStyle":
         if let params = call.arguments as? [String: Any] {
           if let value = params["tint"] as? NSNumber {
-            self.searchBar.tintColor = Self.colorFromARGB(value.intValue)
-            self.applyTrailingActions(self.currentTrailingActions)
+            self.currentTint = Self.colorFromARGB(value.intValue)
           }
           if let value = params["backgroundColor"] as? NSNumber {
-            self.searchBar.backgroundColor = Self.colorFromARGB(value.intValue)
+            self.customBackgroundColor = Self.colorFromARGB(value.intValue)
           }
           if let value = params["fieldBackgroundColor"] as? NSNumber {
-            self.searchBar.searchTextField.backgroundColor = Self.colorFromARGB(value.intValue)
+            self.customFieldBackgroundColor = Self.colorFromARGB(value.intValue)
           }
+          if let value = params["sendButtonBackgroundColor"] as? NSNumber {
+            self.customSendButtonBackgroundColor = Self.colorFromARGB(value.intValue)
+          } else if params.keys.contains("sendButtonBackgroundColor") {
+            self.customSendButtonBackgroundColor = nil
+          }
+          self.applyVisualStyle()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
       case "setVisible":
@@ -184,16 +464,17 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
         } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let params = call.arguments as? [String: Any], let isDark = (params["isDark"] as? NSNumber)?.boolValue {
-          if #available(iOS 13.0, *) {
-            self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
-          }
+          self.isDarkAppearance = isDark
+          self.applyVisualStyle()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
       case "focus":
-        self.searchBar.becomeFirstResponder()
+        if self.controlEnabled && self.focusEnabled {
+          self.textView.becomeFirstResponder()
+        }
         result(nil)
       case "unfocus":
-        self.searchBar.resignFirstResponder()
+        self.textView.resignFirstResponder()
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -205,24 +486,50 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     return container
   }
 
-  func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
-    channel.invokeMethod("textChanged", arguments: ["text": searchText])
+  func textViewDidChange(_ textView: UITextView) {
+    refreshAccessoryButtons()
+    let height = refreshHeightAndNotifyIfNeeded()
+    channel.invokeMethod("textChanged", arguments: [
+      "text": textView.text ?? "",
+      "height": Double(height)
+    ])
   }
 
-  func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
+  func textViewDidBeginEditing(_ textView: UITextView) {
+    guard controlEnabled && focusEnabled else {
+      textView.resignFirstResponder()
+      return
+    }
+    refreshAccessoryButtons()
     channel.invokeMethod("tapped", arguments: nil)
+    channel.invokeMethod("focusChanged", arguments: ["focused": true])
   }
 
-  func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-    channel.invokeMethod("submitted", arguments: ["text": searchBar.text ?? ""])
-    searchBar.resignFirstResponder()
+  func textViewDidEndEditing(_ textView: UITextView) {
+    refreshAccessoryButtons()
+    channel.invokeMethod("focusChanged", arguments: ["focused": false])
   }
 
-  func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
-    searchBar.text = ""
-    channel.invokeMethod("textChanged", arguments: ["text": ""])
+  @objc private func onClearPressed() {
+    guard controlEnabled else { return }
+    applyText("")
+    let height = refreshHeightAndNotifyIfNeeded(force: true)
+    channel.invokeMethod("textChanged", arguments: [
+      "text": "",
+      "height": Double(height)
+    ])
+  }
+
+  @objc private func onCancelPressed() {
+    guard controlEnabled else { return }
+    applyText("")
+    let height = refreshHeightAndNotifyIfNeeded(force: true)
+    channel.invokeMethod("textChanged", arguments: [
+      "text": "",
+      "height": Double(height)
+    ])
     channel.invokeMethod("cancelled", arguments: nil)
-    searchBar.resignFirstResponder()
+    textView.resignFirstResponder()
   }
 
   @objc private func onTrailingPressed(_ sender: UIButton) {
@@ -230,10 +537,363 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     guard index >= 0,
           index < trailingButtonsEnabled.count,
           trailingButtonsEnabled[index],
-          searchBar.searchTextField.isEnabled else {
+          controlEnabled else {
       return
     }
     channel.invokeMethod("trailingActionPressed", arguments: ["index": index])
+  }
+
+  @objc private func onSearchPressed() {
+    guard controlEnabled && isSearchMode else { return }
+    channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
+  }
+
+  @objc private func onSendPressed() {
+    guard controlEnabled, !isSearchMode, let text = textView.text, !text.isEmpty else {
+      return
+    }
+    channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
+  }
+
+  @discardableResult
+  private func configureAccessoryButton(_ button: UIButton, size: CGFloat) -> (width: NSLayoutConstraint, height: NSLayoutConstraint) {
+    button.translatesAutoresizingMaskIntoConstraints = false
+    button.adjustsImageWhenHighlighted = true
+    button.imageView?.contentMode = .scaleAspectFit
+    button.setContentCompressionResistancePriority(.required, for: .horizontal)
+    button.setContentHuggingPriority(.required, for: .horizontal)
+    button.clipsToBounds = true
+    button.layer.cornerCurve = .continuous
+    let widthConstraint = button.widthAnchor.constraint(equalToConstant: size)
+    let heightConstraint = button.heightAnchor.constraint(equalToConstant: size)
+    NSLayoutConstraint.activate([
+      widthConstraint,
+      heightConstraint
+    ])
+    if #available(iOS 15.0, *) {
+      var config = UIButton.Configuration.plain()
+      config.contentInsets = .zero
+      button.configuration = config
+    }
+    return (widthConstraint, heightConstraint)
+  }
+
+  private func applyText(_ text: String) {
+    guard textView.text != text else { return }
+    isApplyingProgrammaticText = true
+    textView.text = text
+    isApplyingProgrammaticText = false
+    updatePlaceholderVisibility()
+    refreshAccessoryButtons()
+    refreshHeightAndNotifyIfNeeded(force: true)
+  }
+
+  private func applyPlaceholder(_ placeholder: String?) {
+    placeholderLabel.text = placeholder
+    updatePlaceholderVisibility()
+  }
+
+  private func applyEnabled(_ enabled: Bool) {
+    controlEnabled = enabled
+    if !enabled && textView.isFirstResponder {
+      textView.resignFirstResponder()
+    }
+    let editable = enabled && focusEnabled
+    textView.isEditable = editable
+    textView.isSelectable = editable
+    textView.isUserInteractionEnabled = enabled
+    fieldClipView.alpha = enabled ? 1.0 : 0.6
+    cancelButton.alpha = enabled ? 1.0 : 0.6
+    clearButton.isEnabled = enabled
+    cancelButton.isEnabled = enabled
+    applyVisualStyle()
+    refreshAccessoryButtons()
+  }
+
+  private func applyFocusEnabled(_ enabled: Bool) {
+    focusEnabled = enabled
+    if !enabled && textView.isFirstResponder {
+      textView.resignFirstResponder()
+    }
+    let editable = controlEnabled && enabled
+    textView.isEditable = editable
+    textView.isSelectable = editable
+  }
+
+  private func applyMode(_ isSearch: Bool) {
+    isSearchMode = isSearch
+    leadingSearchWidthConstraint.constant = isSearch ? accessoryButtonSize : 0
+    searchButtonFirstLineCenterYConstraint.isActive = isSearch
+    updateTrailingAccessoryAlignment()
+    refreshAccessoryButtons()
+    container.setNeedsLayout()
+  }
+
+  private func applyShowsCancelButton(_ shows: Bool) {
+    showsCancelButton = shows
+    cancelButton.isHidden = !shows
+    fieldTrailingConstraintToContainer.isActive = !shows
+    fieldTrailingConstraintToCancel.isActive = shows
+    container.setNeedsLayout()
+  }
+
+  private func applyMinHeight(
+    _ minHeight: CGFloat,
+    maxHeight: CGFloat?,
+    maxVisibleLines: Int?
+  ) {
+    requestedMinHeight = max(36, min(minHeight, self.requestedMaxHeight))
+    if let maxHeight {
+      requestedMaxHeight = max(requestedMinHeight, min(maxHeight, 240))
+    }
+    if let maxVisibleLines {
+      self.maxVisibleLines = max(1, maxVisibleLines)
+    }
+    applyTextInsets()
+    refreshHeightAndNotifyIfNeeded(force: true)
+  }
+
+  private func applyVisualStyle() {
+    if #available(iOS 13.0, *) {
+      container.overrideUserInterfaceStyle = isDarkAppearance ? .dark : .light
+    }
+
+    container.backgroundColor = customBackgroundColor ?? .clear
+    fieldClipView.layer.cornerRadius = fieldCornerRadius
+    fieldClipView.layer.cornerCurve = .continuous
+    fieldClipView.layer.borderWidth = 1
+    fieldClipView.layer.borderColor = UIColor.white.withAlphaComponent(
+      isDarkAppearance ? 0.16 : 0.34
+    ).cgColor
+
+    if #available(iOS 26.0, *) {
+      updateGlassBackground()
+      fieldBackgroundView.isHidden = true
+      glassHostingController?.view.isHidden = false
+      if let customFieldBackgroundColor {
+        fieldTintOverlayView.backgroundColor = customFieldBackgroundColor.withAlphaComponent(
+          isDarkAppearance ? 0.18 : 0.22
+        )
+      } else {
+        fieldTintOverlayView.backgroundColor = UIColor.white.withAlphaComponent(
+          isDarkAppearance ? 0.04 : 0.08
+        )
+      }
+    } else if let customFieldBackgroundColor {
+      fieldBackgroundView.isHidden = true
+      glassHostingController?.view.isHidden = true
+      fieldTintOverlayView.backgroundColor = customFieldBackgroundColor
+    } else {
+      glassHostingController?.view.isHidden = true
+      fieldBackgroundView.isHidden = false
+      fieldBackgroundView.effect = currentBlurEffect()
+      fieldTintOverlayView.backgroundColor = UIColor.secondarySystemFill.withAlphaComponent(
+        isDarkAppearance ? 0.18 : 0.28
+      )
+    }
+
+    textView.textColor = .label
+    textView.tintColor = currentTint ?? container.tintColor
+    placeholderLabel.textColor = .placeholderText
+    placeholderLabel.font = textView.font
+    clearButton.tintColor = .secondaryLabel
+    clearButton.backgroundColor = .clear
+    clearButton.layer.cornerRadius = 0
+    cancelButton.tintColor = currentTint ?? container.tintColor
+    searchButton.tintColor = .secondaryLabel
+    searchButton.backgroundColor = .clear
+    searchButton.layer.cornerRadius = 0
+    sendButton.tintColor = .white
+    sendButton.backgroundColor =
+      customSendButtonBackgroundColor ?? currentTint ?? container.tintColor
+    sendButton.layer.cornerRadius = sendButtonDiameter(for: requestedMinHeight) / 2
+
+    for index in trailingButtons.indices {
+      let color = index < currentTrailingActions.count
+        ? (currentTrailingActions[index].iconDataColor ?? currentTint ?? container.tintColor)
+        : (currentTint ?? container.tintColor)
+      trailingButtons[index].tintColor = color
+      trailingButtons[index].backgroundColor = .clear
+      trailingButtons[index].layer.cornerRadius = 0
+    }
+  }
+
+  private func currentBlurEffect() -> UIBlurEffect {
+    if #available(iOS 13.0, *) {
+      return UIBlurEffect(
+        style: isDarkAppearance ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight
+      )
+    }
+    return UIBlurEffect(style: .extraLight)
+  }
+
+  private func applyTextInsets() {
+    let lineHeight = ceil(textView.font?.lineHeight ?? UIFont.systemFont(ofSize: 17).lineHeight)
+    let centeredInset = (requestedMinHeight - lineHeight) / 2.0
+    let verticalInset = max(compactVerticalPadding - 1, centeredInset)
+    textView.textContainerInset = UIEdgeInsets(
+      top: verticalInset,
+      left: 0,
+      bottom: verticalInset,
+      right: 0
+    )
+    let firstLineCenterOffset = verticalInset + (lineHeight / 2.0)
+    searchButtonFirstLineCenterYConstraint?.constant = firstLineCenterOffset
+    trailingStackFirstLineCenterYConstraint?.constant = firstLineCenterOffset
+    placeholderTopConstraint?.constant = firstLineCenterOffset
+  }
+
+  private func currentFirstLineCenterOffset() -> CGFloat {
+    let lineHeight = ceil(textView.font?.lineHeight ?? UIFont.systemFont(ofSize: 17).lineHeight)
+    return textView.textContainerInset.top + (lineHeight / 2.0)
+  }
+
+  private func installGlassBackgroundIfNeeded() {
+    guard #available(iOS 26.0, *) else { return }
+    guard glassHostingController == nil else { return }
+
+    let host = UIHostingController(
+      rootView: AnyView(
+        IOSGlassInputBackground(
+          cornerRadius: fieldCornerRadius,
+          accentColor: currentTint ?? container.tintColor,
+          isDark: isDarkAppearance,
+          isEnabled: controlEnabled
+        )
+      )
+    )
+    host.view.translatesAutoresizingMaskIntoConstraints = false
+    host.view.backgroundColor = .clear
+    host.view.isUserInteractionEnabled = false
+    glassHostingController = host
+    fieldClipView.addSubview(host.view)
+    NSLayoutConstraint.activate([
+      host.view.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
+      host.view.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
+      host.view.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      host.view.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+    ])
+  }
+
+  private func updateGlassBackground() {
+    guard #available(iOS 26.0, *) else { return }
+    installGlassBackgroundIfNeeded()
+    glassHostingController?.rootView = AnyView(
+      IOSGlassInputBackground(
+        cornerRadius: fieldCornerRadius,
+        accentColor: currentTint ?? container.tintColor,
+        isDark: isDarkAppearance,
+        isEnabled: controlEnabled
+      )
+    )
+    glassHostingController?.view.isHidden = false
+  }
+
+  private func updatePlaceholderVisibility() {
+    placeholderLabel.isHidden = !(textView.text ?? "").isEmpty
+  }
+
+  private func updateTrailingAccessoryAlignment(
+    hasText: Bool? = nil,
+    currentFieldHeight: CGFloat? = nil
+  ) {
+    let resolvedHasText = hasText ?? !(textView.text ?? "").isEmpty
+    let showsSendButton = !isSearchMode && resolvedHasText
+    let resolvedFieldHeight = max(
+      requestedMinHeight,
+      currentFieldHeight ?? (lastReportedHeight > 0 ? lastReportedHeight : requestedMinHeight)
+    )
+    let centersSendButton = showsSendButton && resolvedFieldHeight <= requestedMinHeight + 0.5
+    let alignsToTextCenter = isSearchMode || !resolvedHasText
+    trailingStackFirstLineCenterYConstraint.isActive = alignsToTextCenter
+    trailingStackCenterYConstraint.isActive = centersSendButton
+    trailingStackBottomConstraint.isActive = showsSendButton && !centersSendButton
+    trailingStackTrailingConstraint.constant = showsSendButton ? -sendButtonOuterInset : -(compactHorizontalPadding - 2)
+    trailingStackBottomConstraint.constant = -sendButtonOuterInset
+  }
+
+  private func sendButtonDiameter(for fieldHeight: CGFloat) -> CGFloat {
+    return max(0, fieldHeight - (sendButtonOuterInset * 2) + sendButtonDiameterBoost)
+  }
+
+  private func updateSendButtonSize(for fieldHeight: CGFloat) {
+    let diameter = sendButtonDiameter(for: fieldHeight)
+    sendButtonWidthConstraint.constant = diameter
+    sendButtonHeightConstraint.constant = diameter
+    sendButton.layer.cornerRadius = diameter / 2
+  }
+
+  private func refreshAccessoryButtons() {
+    let hasText = !(textView.text ?? "").isEmpty
+    let showsActionButtons = isSearchMode
+      ? (!hasText && textView.isFirstResponder)
+      : !hasText
+
+    updateTrailingAccessoryAlignment(hasText: hasText)
+
+    clearButton.isHidden = !isSearchMode || !hasText
+    clearButton.isEnabled = controlEnabled && isSearchMode && hasText
+    clearButton.alpha = clearButton.isEnabled ? 1.0 : 0.6
+
+    searchButton.isHidden = !isSearchMode
+    searchButton.isEnabled = controlEnabled && isSearchMode
+    searchButton.alpha = searchButton.isEnabled ? 1.0 : 0.6
+
+    sendButton.isHidden = isSearchMode || !hasText
+    sendButton.isEnabled = controlEnabled && !isSearchMode && hasText
+    sendButton.alpha = sendButton.isEnabled ? 1.0 : 0.6
+
+    for (index, button) in trailingButtons.enumerated() {
+      let canShow = showsActionButtons && trailingButtonsEnabled[index]
+      button.isHidden = !canShow
+      button.isEnabled = controlEnabled && canShow
+      button.alpha = button.isEnabled ? 1.0 : 0.6
+    }
+
+    updatePlaceholderVisibility()
+  }
+
+  @discardableResult
+  private func refreshHeightAndNotifyIfNeeded(force: Bool = false) -> CGFloat {
+    let availableWidth = max(
+      textView.bounds.width,
+      fieldClipView.bounds.width
+        - compactHorizontalPadding
+        - trailingStackView.bounds.width
+        - compactHorizontalPadding
+    )
+    let font = textView.font ?? UIFont.systemFont(ofSize: 17)
+    let fittingSize = textView.sizeThatFits(
+      CGSize(width: max(availableWidth, 40), height: CGFloat.greatestFiniteMagnitude)
+    )
+    let descenderCompensation = ceil(abs(font.descender)) + 1
+    let contentHeight = ceil(fittingSize.height + descenderCompensation)
+    let lineHeight = ceil(font.lineHeight)
+    let maxVisibleHeight = ceil(
+      lineHeight * CGFloat(maxVisibleLines)
+        + textView.textContainerInset.top
+        + textView.textContainerInset.bottom
+        + descenderCompensation
+    )
+    let desiredHeight = min(
+      requestedMaxHeight,
+      max(requestedMinHeight, min(contentHeight, maxVisibleHeight))
+    )
+    updateSendButtonSize(for: requestedMinHeight)
+    updateTrailingAccessoryAlignment(
+      hasText: !(textView.text ?? "").isEmpty,
+      currentFieldHeight: desiredHeight
+    )
+    let shouldScroll = contentHeight > maxVisibleHeight + 0.5
+    if textView.isScrollEnabled != shouldScroll {
+      textView.isScrollEnabled = shouldScroll
+    }
+
+    if force || abs(lastReportedHeight - desiredHeight) > 0.5 {
+      lastReportedHeight = desiredHeight
+      channel.invokeMethod("heightChanged", arguments: ["height": Double(desiredHeight)])
+    }
+    return desiredHeight
   }
 
   private static func parseTrailingActions(_ raw: Any?) -> [TrailingAction] {
@@ -268,41 +928,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
     return actions
   }
 
-  private func applyEnabled(_ enabled: Bool) {
-    searchBar.isUserInteractionEnabled = enabled
-    searchBar.searchTextField.isEnabled = enabled
-    searchBar.alpha = enabled ? 1.0 : 0.6
-    for (index, button) in trailingButtons.enumerated() {
-      button.isEnabled = enabled && trailingButtonsEnabled[index]
-      button.alpha = button.isEnabled ? 1.0 : 0.6
-    }
-  }
-
-  private func applyHeight(_ height: CGFloat) {
-    requestedHeight = max(32, min(height, 240))
-    searchBar.setNeedsLayout()
-    searchBar.layoutIfNeeded()
-    updateTextFieldAppearanceForHeight()
-    installTrailingButtonsInTextField()
-  }
-
-  private func updateTextFieldAppearanceForHeight() {
-    let textField = searchBar.searchTextField
-    let textFieldHeight = max(28, min(requestedHeight - 14, 120))
-
-    if textField.bounds.height > 0 {
-      var frame = textField.frame
-      frame.size.height = textFieldHeight
-      frame.origin.y = (searchBar.bounds.height - textFieldHeight) / 2.0
-      textField.frame = frame.integral
-    }
-
-    let fontSize = max(12, min(24, textFieldHeight * 0.45))
-    textField.font = UIFont.systemFont(ofSize: fontSize)
-    textField.layer.cornerRadius = textFieldHeight / 2.0
-    textField.layer.masksToBounds = true
-  }
-
   private func applyTrailingActions(_ actions: [TrailingAction]) {
     currentTrailingActions = Array(actions.prefix(2))
     for index in 0..<trailingButtons.count {
@@ -330,55 +955,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UISearchBar
       trailingButtons[index].isHidden = false
       trailingButtonsEnabled[index] = true
       trailingButtons[index].tintColor =
-        currentTrailingActions[index].iconDataColor ?? searchBar.tintColor
+        currentTrailingActions[index].iconDataColor ?? currentTint ?? container.tintColor
     }
-    installTrailingButtonsInTextField()
-    applyEnabled(searchBar.searchTextField.isEnabled)
-  }
-
-  private func installTrailingButtonsInTextField() {
-    if isInstallingTrailingButtons { return }
-    isInstallingTrailingButtons = true
-    defer { isInstallingTrailingButtons = false }
-
-    let visibleEntries = trailingButtons.enumerated().compactMap { index, button
-      -> (button: UIButton, side: CGFloat)? in
-      guard !button.isHidden, index < currentTrailingActions.count else {
-        return nil
-      }
-      return (button, actionButtonSide(currentTrailingActions[index]))
-    }
-    guard !visibleEntries.isEmpty else {
-      searchBar.searchTextField.rightView = nil
-      searchBar.searchTextField.rightViewMode = .never
-      return
-    }
-
-    let spacing: CGFloat = 0
-    let totalWidth = visibleEntries
-      .map { $0.side }
-      .reduce(CGFloat(0), +)
-    let width = totalWidth + (spacing * CGFloat(max(0, visibleEntries.count - 1)))
-    let containerHeight = visibleEntries
-      .map { $0.side }
-      .reduce(CGFloat(0), max)
-    let container = UIView(frame: CGRect(x: 0, y: 0, width: width, height: containerHeight))
-    var x: CGFloat = 0
-    for entry in visibleEntries {
-      let button = entry.button
-      let side = entry.side
-      button.removeFromSuperview()
-      button.frame = CGRect(
-        x: x,
-        y: (containerHeight - side) / 2.0,
-        width: side,
-        height: side
-      )
-      container.addSubview(button)
-      x += side + spacing
-    }
-    searchBar.searchTextField.rightView = container
-    searchBar.searchTextField.rightViewMode = .always
+    refreshAccessoryButtons()
   }
 
   private func actionButtonSide(_ action: TrailingAction) -> CGFloat {
