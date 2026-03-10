@@ -114,6 +114,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var lastReportedHeight: CGFloat = 0
   private var isDarkAppearance = false
   private var isApplyingProgrammaticText = false
+  private var hasInteractedWithSearchField = false
 
   private let compactHorizontalPadding: CGFloat = 16
   private let compactVerticalPadding: CGFloat = 8
@@ -498,6 +499,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       textView.resignFirstResponder()
       return
     }
+    hasInteractedWithSearchField = true
     refreshAccessoryButtons()
     channel.invokeMethod("tapped", arguments: nil)
     channel.invokeMethod("focusChanged", arguments: ["focused": true])
@@ -619,7 +621,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   }
 
   private func applyMode(_ isSearch: Bool) {
+    let wasSearchMode = isSearchMode
     isSearchMode = isSearch
+    if isSearch && !wasSearchMode {
+      hasInteractedWithSearchField = false
+    }
     leadingSearchWidthConstraint.constant = isSearch ? accessoryButtonSize : 0
     updateTrailingAccessoryAlignment()
     refreshAccessoryButtons()
@@ -824,7 +830,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private func refreshAccessoryButtons() {
     let hasText = !(textView.text ?? "").isEmpty
     let showsActionButtons = isSearchMode
-      ? (!hasText && textView.isFirstResponder)
+      ? (!hasText && (!hasInteractedWithSearchField || textView.isFirstResponder))
       : !hasText
 
     updateTrailingAccessoryAlignment(hasText: hasText)
@@ -968,7 +974,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   }
 
   private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
-    return min(17, max(12, action.iconDataSize))
+    return min(accessoryButtonSize - 4, max(8, action.iconDataSize))
   }
 
   private static func iconImage(

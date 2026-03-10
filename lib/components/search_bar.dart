@@ -6,7 +6,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
-import '../channel/platform_view_modal_visibility.dart';
 
 /// Trailing action rendered by the text field.
 class CNTextFieldAction {
@@ -158,6 +157,7 @@ class _CNTextFieldState extends State<CNTextField> {
 
   bool _isApplyingNativeTextChange = false;
   bool _isApplyingNativeFocusChange = false;
+  bool _hasSearchInteractionOccurred = false;
   double? _reportedNativeHeight;
   double? _pendingNativeHeight;
   bool _hasScheduledNativeHeightCommit = false;
@@ -213,7 +213,8 @@ class _CNTextFieldState extends State<CNTextField> {
   bool get _showsActions {
     if (widget.actions.isEmpty) return false;
     if (_isSearchMode) {
-      return _focusNode.hasFocus && _textController.text.isEmpty;
+      return _textController.text.isEmpty &&
+          (!_hasSearchInteractionOccurred || _focusNode.hasFocus);
     }
     return _textController.text.isEmpty;
   }
@@ -235,6 +236,10 @@ class _CNTextFieldState extends State<CNTextField> {
   @override
   void didUpdateWidget(covariant CNTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (!oldWidget._isSearch && widget._isSearch) {
+      _hasSearchInteractionOccurred = false;
+    }
 
     if (oldWidget.controller != widget.controller) {
       _unobserveController(oldWidget.controller ?? _fallbackController);
@@ -307,6 +312,9 @@ class _CNTextFieldState extends State<CNTextField> {
   }
 
   void _onFocusNodeChanged() {
+    if (_isSearchMode && _focusNode.hasFocus) {
+      _hasSearchInteractionOccurred = true;
+    }
     if (_isNativePlatform && !_isApplyingNativeFocusChange) {
       _syncFocusToNativeIfNeeded();
     }
@@ -1058,7 +1066,7 @@ class _CNTextFieldState extends State<CNTextField> {
 
   double _resolvedActionIconSize(double? requestedSize) {
     final baseSize = requestedSize ?? 16.0;
-    return baseSize.clamp(12.0, 17.0).toDouble();
+    return baseSize.clamp(8.0, _kAccessorySize - 4.0).toDouble();
   }
 
   bool _textFitsOnSingleLine({

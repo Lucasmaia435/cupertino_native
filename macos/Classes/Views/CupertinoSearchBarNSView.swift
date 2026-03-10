@@ -109,6 +109,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private var maxVisibleLines = 1
   private var lastReportedHeight: CGFloat = 0
   private var isDarkAppearance = false
+  private var hasInteractedWithSearchField = false
 
   private let compactHorizontalPadding: CGFloat = 16
   private let compactVerticalPadding: CGFloat = 8
@@ -514,6 +515,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       window?.makeFirstResponder(nil)
       return
     }
+    hasInteractedWithSearchField = true
     refreshAccessoryButtons()
     channel.invokeMethod("tapped", arguments: nil)
     channel.invokeMethod("focusChanged", arguments: ["focused": true])
@@ -650,7 +652,11 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   }
 
   private func applyMode(_ isSearch: Bool) {
+    let wasSearchMode = isSearchMode
     isSearchMode = isSearch
+    if isSearch && !wasSearchMode {
+      hasInteractedWithSearchField = false
+    }
     leadingSearchWidthConstraint.constant = isSearch ? accessoryButtonSize : 0
     updateTrailingAccessoryAlignment()
     refreshAccessoryButtons()
@@ -809,7 +815,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private func refreshAccessoryButtons() {
     let hasText = !textView.string.isEmpty
     let showsActionButtons = isSearchMode
-      ? (!hasText && window?.firstResponder === textView)
+      ? (!hasText && (!hasInteractedWithSearchField || window?.firstResponder === textView))
       : !hasText
 
     updateTrailingAccessoryAlignment(hasText: hasText)
@@ -981,7 +987,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   }
 
   private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
-    return min(17, max(12, action.iconDataSize))
+    return min(accessoryButtonSize - 4, max(8, action.iconDataSize))
   }
 
   private static func iconImage(
