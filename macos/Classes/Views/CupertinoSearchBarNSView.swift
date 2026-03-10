@@ -42,6 +42,10 @@ private struct MacGlassInputBackground: View {
   }
 }
 
+private final class NonFlashingScrollView: NSScrollView {
+  override func flashScrollers() {}
+}
+
 class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private struct FlutterFontManifestEntry {
     let family: String
@@ -123,7 +127,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     self.fieldClipView = NSView(frame: .zero)
     self.fieldBackgroundView = NSVisualEffectView(frame: .zero)
     self.fieldTintOverlayView = NSView(frame: .zero)
-    self.scrollView = NSScrollView(frame: .zero)
+    self.scrollView = NonFlashingScrollView(frame: .zero)
     self.textView = NSTextView(frame: .zero)
     self.placeholderLabel = NSTextField(labelWithString: "")
     self.clearButton = clearButton
@@ -206,7 +210,8 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     scrollView.borderType = .noBorder
     scrollView.hasVerticalScroller = false
     scrollView.hasHorizontalScroller = false
-    scrollView.autohidesScrollers = true
+    scrollView.autohidesScrollers = false
+    scrollView.scrollerStyle = .legacy
 
     textView.delegate = self
     textView.translatesAutoresizingMaskIntoConstraints = false
@@ -863,8 +868,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
         hasText: !textView.string.isEmpty,
         currentFieldHeight: desiredHeight
       )
-      let shouldScroll = contentHeight > maxVisibleHeight + 0.5
-      scrollView.hasVerticalScroller = shouldScroll
+      scrollView.hasVerticalScroller = false
       textView.frame.size = NSSize(
         width: max(availableWidth, 40),
         height: max(contentHeight, scrollView.contentSize.height)

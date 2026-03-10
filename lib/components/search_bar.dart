@@ -757,34 +757,37 @@ class _CNTextFieldState extends State<CNTextField> {
                     Expanded(
                       child: CupertinoTheme(
                         data: theme.copyWith(primaryColor: effectiveTint),
-                        child: CupertinoTextField.borderless(
-                          controller: _textController,
-                          focusNode: _focusNode,
-                          autofocus: widget.autofocus,
-                          enabled: widget.enabled,
-                          enableInteractiveSelection: canInteractWithTextInput,
-                          padding: EdgeInsetsDirectional.only(start: _isSearchMode ? 0 : _kFieldHorizontalPadding, end: 4, top: effectiveTextVerticalPadding, bottom: effectiveTextVerticalPadding),
-                          minLines: 1,
-                          maxLines: _isSearchMode ? 1 : null,
-                          keyboardType: keyboardType,
-                          textInputAction: textInputAction,
-                          style: textStyle,
-                          strutStyle: strutStyle,
-                          placeholder: widget.placeholder,
-                          placeholderStyle: textStyle.copyWith(color: resolvedPlaceholderColor),
-                          cursorColor: effectiveTint,
-                          onTap: widget.onTap,
-                          onChanged: widget.onChanged,
-                          onSubmitted: widget.onSubmitted,
-                          contextMenuBuilder: (context, editableTextState) {
-                            if (!canInteractWithTextInput) {
-                              return const SizedBox.shrink();
-                            }
-                            if (defaultTargetPlatform == TargetPlatform.iOS && SystemContextMenu.isSupported(context)) {
-                              return SystemContextMenu.editableText(editableTextState: editableTextState);
-                            }
-                            return CupertinoAdaptiveTextSelectionToolbar.editableText(editableTextState: editableTextState);
-                          },
+                        child: ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                          child: CupertinoTextField.borderless(
+                            controller: _textController,
+                            focusNode: _focusNode,
+                            autofocus: widget.autofocus,
+                            enabled: widget.enabled,
+                            enableInteractiveSelection: canInteractWithTextInput,
+                            padding: EdgeInsetsDirectional.only(start: _isSearchMode ? 0 : _kFieldHorizontalPadding, end: 4, top: effectiveTextVerticalPadding, bottom: effectiveTextVerticalPadding),
+                            minLines: 1,
+                            maxLines: _isSearchMode ? 1 : null,
+                            keyboardType: keyboardType,
+                            textInputAction: textInputAction,
+                            style: textStyle,
+                            strutStyle: strutStyle,
+                            placeholder: widget.placeholder,
+                            placeholderStyle: textStyle.copyWith(color: resolvedPlaceholderColor),
+                            cursorColor: effectiveTint,
+                            onTap: widget.onTap,
+                            onChanged: widget.onChanged,
+                            onSubmitted: widget.onSubmitted,
+                            contextMenuBuilder: (context, editableTextState) {
+                              if (!canInteractWithTextInput) {
+                                return const SizedBox.shrink();
+                              }
+                              if (defaultTargetPlatform == TargetPlatform.iOS && SystemContextMenu.isSupported(context)) {
+                                return SystemContextMenu.editableText(editableTextState: editableTextState);
+                              }
+                              return CupertinoAdaptiveTextSelectionToolbar.editableText(editableTextState: editableTextState);
+                            },
+                          ),
                         ),
                       ),
                     ),

@@ -221,6 +221,8 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     textView.text = text
     textView.font = UIFont.systemFont(ofSize: 17)
     textView.isScrollEnabled = false
+    textView.showsVerticalScrollIndicator = false
+    textView.showsHorizontalScrollIndicator = false
     textView.alwaysBounceVertical = false
     textView.keyboardDismissMode = .interactive
     textView.textContainer.lineFragmentPadding = 0
