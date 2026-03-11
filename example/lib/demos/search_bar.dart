@@ -10,9 +10,7 @@ class SearchBarDemoPage extends StatefulWidget {
 
 class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
   final TextEditingController _queryController = TextEditingController();
-  final TextEditingController _coloredController = TextEditingController(
-    text: 'Cupertino',
-  );
+  final TextEditingController _coloredController = TextEditingController(text: 'Cupertino');
   final TextEditingController _chatController = TextEditingController();
   final TextEditingController _bottomChatController = TextEditingController();
 
@@ -40,12 +38,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
     });
   }
 
-  Widget _iconAction({
-    required IconData icon,
-    required VoidCallback onPressed,
-    Color? color,
-    double size = 20,
-  }) {
+  Widget _iconAction({required IconData icon, required VoidCallback onPressed, Color? color, double size = 20}) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
       minimumSize: const Size(28, 28),
@@ -54,11 +47,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
     );
   }
 
-  Widget _sendAction({
-    required BuildContext context,
-    required bool enabled,
-    required VoidCallback onPressed,
-  }) {
+  Widget _sendAction({required BuildContext context, required bool enabled, required VoidCallback onPressed}) {
     final tint = CupertinoTheme.of(context).primaryColor;
     return CupertinoButton(
       padding: EdgeInsets.zero,
@@ -67,26 +56,16 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
       child: Container(
         width: 30,
         height: 30,
-        decoration: BoxDecoration(
-          color: enabled ? tint : tint.withValues(alpha: 0.28),
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: enabled ? tint : tint.withValues(alpha: 0.28), shape: BoxShape.circle),
         alignment: Alignment.center,
-        child: Icon(
-          CupertinoIcons.arrow_up,
-          size: 16,
-          color: CupertinoColors.white.withValues(alpha: enabled ? 1 : 0.72),
-        ),
+        child: Icon(CupertinoIcons.arrow_up, size: 16, color: CupertinoColors.white.withValues(alpha: enabled ? 1 : 0.72)),
       ),
     );
   }
 
   List<Widget> _buildSearchTrailing(BuildContext context) {
     final query = _queryController.text;
-    final placeholderColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.placeholderText,
-      context,
-    );
+    final placeholderColor = CupertinoDynamicColor.resolve(CupertinoColors.placeholderText, context);
 
     if (query.isNotEmpty) {
       return [
@@ -111,13 +90,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                 _lastSubmitted = 'Cancelled';
               });
             },
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: CupertinoTheme.of(context).primaryColor,
-                fontSize: 16,
-              ),
-            ),
+            child: Text('Cancel', style: TextStyle(color: CupertinoTheme.of(context).primaryColor, fontSize: 16)),
           ),
         ],
       ];
@@ -147,22 +120,13 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
           onPressed: () {
             setState(() => _lastSubmitted = 'Cancelled');
           },
-          child: Text(
-            'Cancel',
-            style: TextStyle(
-              color: CupertinoTheme.of(context).primaryColor,
-              fontSize: 16,
-            ),
-          ),
+          child: Text('Cancel', style: TextStyle(color: CupertinoTheme.of(context).primaryColor, fontSize: 16)),
         ),
       ],
     ];
   }
 
-  List<Widget> _buildComposerTrailing(
-    BuildContext context,
-    TextEditingController controller,
-  ) {
+  List<Widget> _buildComposerTrailing(BuildContext context, TextEditingController controller) {
     final hasText = controller.text.trim().isNotEmpty;
     return [
       _iconAction(
@@ -181,20 +145,13 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
         },
       ),
       const SizedBox(width: 8),
-      _sendAction(
-        context: context,
-        enabled: hasText,
-        onPressed: () => _submitChat(controller),
-      ),
+      _sendAction(context: context, enabled: hasText, onPressed: () => _submitChat(controller)),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final placeholderColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.placeholderText,
-      context,
-    );
+    final placeholderColor = CupertinoDynamicColor.resolve(CupertinoColors.placeholderText, context);
 
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(middle: Text('Text Field')),
@@ -212,11 +169,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                     controller: _queryController,
                     placeholder: 'Search',
                     enabled: _enabled,
-                    leading: Icon(
-                      CupertinoIcons.search,
-                      color: placeholderColor,
-                      size: 20,
-                    ),
+                    leading: Icon(CupertinoIcons.search, color: placeholderColor, size: 20),
                     trailing: _buildSearchTrailing(context),
                     onChanged: (_) => setState(() {}),
                     onTap: () => setState(() => _lastTap = 'Tapped'),
@@ -228,9 +181,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Current text: ${_queryController.text.isEmpty ? 'Empty' : _queryController.text}',
-                ),
+                Text('Current text: ${_queryController.text.isEmpty ? 'Empty' : _queryController.text}'),
                 Text('Last submitted: $_lastSubmitted'),
                 Text('Trailing action: $_lastTrailingAction'),
                 Text('Last tap: $_lastTap'),
@@ -239,10 +190,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                   children: [
                     const Text('Enabled'),
                     const Spacer(),
-                    CupertinoSwitch(
-                      value: _enabled,
-                      onChanged: (value) => setState(() => _enabled = value),
-                    ),
+                    CupertinoSwitch(value: _enabled, onChanged: (value) => setState(() => _enabled = value)),
                   ],
                 ),
                 Row(
@@ -279,19 +227,9 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                       context: context,
                       builder: (context) => CupertinoActionSheet(
                         title: const Text('Text Field Overlay'),
-                        message: const Text(
-                          'The text field keeps the native surface while accessories are built in Flutter.',
-                        ),
-                        actions: [
-                          CupertinoActionSheetAction(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Dismiss'),
-                          ),
-                        ],
-                        cancelButton: CupertinoActionSheetAction(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Close'),
-                        ),
+                        message: const Text('The text field keeps the native surface while accessories are built in Flutter.'),
+                        actions: [CupertinoActionSheetAction(onPressed: () => Navigator.of(context).pop(), child: const Text('Dismiss'))],
+                        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
                       ),
                     );
                   },
@@ -302,14 +240,8 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                 CNTextField(
                   controller: _coloredController,
                   placeholder: 'Search components',
-                  style: const CNTextFieldStyle(
-                    tint: CupertinoColors.systemBlue,
-                  ),
-                  leading: const Icon(
-                    CupertinoIcons.search,
-                    color: CupertinoColors.systemGrey,
-                    size: 20,
-                  ),
+                  style: const CNTextFieldStyle(tint: CupertinoColors.systemBlue),
+                  leading: const Icon(CupertinoIcons.search, color: CupertinoColors.systemGrey, size: 20),
                   trailing: [
                     _iconAction(
                       icon: CupertinoIcons.clear_circled_solid,
@@ -337,9 +269,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                   placeholder: 'Type a message',
                   enabled: _enabled,
                   layout: const CNTextFieldLayout(maxVisibleLines: 4),
-                  style: const CNTextFieldStyle(
-                    tint: CupertinoColors.systemBlue,
-                  ),
+                  style: const CNTextFieldStyle(tint: CupertinoColors.systemBlue),
                   trailing: _buildComposerTrailing(context, _chatController),
                   onChanged: (_) => setState(() {}),
                   onSubmitted: (_) => _submitChat(_chatController),
@@ -386,14 +316,9 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                   controller: _bottomChatController,
                   placeholder: 'What should I eat next?',
                   enabled: _enabled,
-                  layout: const CNTextFieldLayout(maxVisibleLines: 4),
-                  style: const CNTextFieldStyle(
-                    tint: CupertinoColors.systemBlue,
-                  ),
-                  trailing: _buildComposerTrailing(
-                    context,
-                    _bottomChatController,
-                  ),
+                  layout: const CNTextFieldLayout(maxVisibleLines: 10),
+                  style: const CNTextFieldStyle(tint: CupertinoColors.systemBlue),
+                  trailing: _buildComposerTrailing(context, _bottomChatController),
                   onChanged: (_) => setState(() {}),
                   onTap: () => setState(() => _lastTap = 'Tapped'),
                   onSubmitted: (_) => _submitChat(_bottomChatController),

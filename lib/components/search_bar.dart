@@ -228,6 +228,11 @@ class _CNTextFieldState extends State<CNTextField> {
   double get _trailingReservedWidth =>
       _hasTrailingAccessories ? _trailingWidth + _layout.accessoryGap : 0.0;
 
+  double get _trailingBottomInset => math.max(
+    0.0,
+    _layout.fieldVerticalPadding - _layout.textOpticalVerticalOffset,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -732,15 +737,13 @@ class _CNTextFieldState extends State<CNTextField> {
           if (trailing.isNotEmpty)
             PositionedDirectional(
               end: trailingInset,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: _SizeObserver(
-                  onSize: _updateTrailingWidth,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: trailing,
-                  ),
+              bottom: _trailingBottomInset,
+              child: _SizeObserver(
+                onSize: _updateTrailingWidth,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: trailing,
                 ),
               ),
             ),
@@ -920,15 +923,13 @@ class _CNTextFieldState extends State<CNTextField> {
               if (_hasTrailingAccessories)
                 PositionedDirectional(
                   end: math.max(0.0, _layout.fieldHorizontalPadding - 2),
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: _SizeObserver(
-                      onSize: _updateTrailingWidth,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: widget.trailing,
-                      ),
+                  bottom: _trailingBottomInset,
+                  child: _SizeObserver(
+                    onSize: _updateTrailingWidth,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: widget.trailing,
                     ),
                   ),
                 ),

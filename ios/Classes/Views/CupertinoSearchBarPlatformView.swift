@@ -1329,16 +1329,19 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   @discardableResult
   private func refreshHeightAndNotifyIfNeeded(force: Bool = false) -> CGFloat {
-    let availableWidth = max(
-      textView.bounds.width,
-      fieldClipView.bounds.width
-        - compactHorizontalPadding
-        - trailingStackView.bounds.width
-        - compactHorizontalPadding
-    )
+    container.layoutIfNeeded()
+    fieldClipView.layoutIfNeeded()
+
+    let fallbackWidth = fieldClipView.bounds.width
+      - compactHorizontalPadding
+      - currentLeadingAccessoryWidth()
+      - trailingReservedWidth
+      - compactHorizontalPadding
+    let measuredWidth = textView.bounds.width
+    let availableWidth = max(measuredWidth > 0 ? measuredWidth : fallbackWidth, 40)
     let font = textView.font ?? UIFont.systemFont(ofSize: 17)
     let fittingSize = textView.sizeThatFits(
-      CGSize(width: max(availableWidth, 40), height: CGFloat.greatestFiniteMagnitude)
+      CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude)
     )
     let descenderCompensation = ceil(abs(font.descender)) + 1
     let contentHeight = ceil(fittingSize.height + descenderCompensation)

@@ -1213,17 +1213,20 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
   @discardableResult
   private func refreshHeightAndNotifyIfNeeded(force: Bool = false) -> CGFloat {
-    let availableWidth = max(
-      scrollView.contentSize.width,
-      fieldClipView.bounds.width
-        - compactHorizontalPadding
-        - trailingButtonsStack.bounds.width
-        - compactHorizontalPadding
-    )
+    layoutSubtreeIfNeeded()
+    fieldClipView.layoutSubtreeIfNeeded()
+
+    let fallbackWidth = fieldClipView.bounds.width
+      - compactHorizontalPadding
+      - currentLeadingAccessoryWidth()
+      - trailingReservedWidth
+      - compactHorizontalPadding
+    let measuredWidth = max(scrollView.contentSize.width, scrollView.bounds.width)
+    let availableWidth = max(measuredWidth > 0 ? measuredWidth : fallbackWidth, 40)
     if let textContainer = textView.textContainer {
       let font = textView.font ?? NSFont.systemFont(ofSize: 16)
       textContainer.containerSize = NSSize(
-        width: max(availableWidth, 40),
+        width: availableWidth,
         height: CGFloat.greatestFiniteMagnitude
       )
       textView.layoutManager?.ensureLayout(for: textContainer)
@@ -1255,7 +1258,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       )
       scrollView.hasVerticalScroller = false
       textView.frame.size = NSSize(
-        width: max(availableWidth, 40),
+        width: availableWidth,
         height: max(contentHeight, scrollView.contentSize.height)
       )
 
