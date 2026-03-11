@@ -1,82 +1,113 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
 
-/// Trailing action rendered by the text field.
-class CNTextFieldAction {
-  /// Creates a trailing action.
-  const CNTextFieldAction({required this.icon, required this.onPressed});
+/// Layout configuration for [CNTextField].
+class CNTextFieldLayout {
+  /// Creates a layout configuration.
+  const CNTextFieldLayout({
+    this.height = 44.0,
+    this.maxHeight = 240.0,
+    this.maxVisibleLines = 1,
+    this.borderRadius = 28.0,
+    this.fieldHorizontalPadding = 16.0,
+    this.fieldVerticalPadding = 8.0,
+    this.textOpticalVerticalOffset = 1.5,
+    this.accessoryGap = 8.0,
+  });
 
-  /// Icon rendered by the trailing button.
-  final Icon icon;
+  /// Minimum visual height of the field.
+  final double height;
 
-  /// Called when the action is pressed.
-  final VoidCallback onPressed;
+  /// Maximum visual height of the field before the text view scrolls.
+  final double maxHeight;
+
+  /// Maximum number of visible lines before the field starts scrolling.
+  final int maxVisibleLines;
+
+  /// Border radius applied to the field chrome.
+  final double borderRadius;
+
+  /// Horizontal padding inside the field.
+  final double fieldHorizontalPadding;
+
+  /// Vertical padding inside the field.
+  final double fieldVerticalPadding;
+
+  /// Small optical offset used to align text and accessories.
+  final double textOpticalVerticalOffset;
+
+  /// Gap reserved between the text and custom accessories.
+  final double accessoryGap;
 }
 
-/// Deprecated compatibility alias for [CNTextFieldAction].
-@Deprecated('Use CNTextFieldAction instead.')
-class CNSearchBarAction extends CNTextFieldAction {
-  /// Creates a trailing action.
-  const CNSearchBarAction({required super.icon, required super.onPressed});
+/// Visual styling for [CNTextField].
+class CNTextFieldStyle {
+  /// Creates a style configuration.
+  const CNTextFieldStyle({
+    this.tint,
+    this.backgroundColor,
+    this.fieldBackgroundColor,
+    this.fieldOverlayColor,
+    this.fieldBorderColor,
+    this.placeholderColor,
+    this.disabledOpacity = 0.6,
+  });
+
+  /// Accent/tint color.
+  final Color? tint;
+
+  /// Optional outer container background color.
+  final Color? backgroundColor;
+
+  /// Optional background color for the field surface.
+  final Color? fieldBackgroundColor;
+
+  /// Optional overlay color applied on top of the field surface.
+  final Color? fieldOverlayColor;
+
+  /// Optional explicit border color.
+  final Color? fieldBorderColor;
+
+  /// Optional placeholder color.
+  final Color? placeholderColor;
+
+  /// Opacity used when the field is disabled.
+  final double disabledOpacity;
 }
 
 /// A Cupertino-native text field rendered by the host platform.
 ///
-/// On iOS/macOS this embeds a native multiline text field through platform
-/// views. On unsupported platforms it falls back to a Flutter-composed
-/// Cupertino text field.
+/// Accessories are provided as regular Flutter widgets via [leading] and
+/// [trailing]. Visibility and behavior are intentionally controlled by the
+/// client widget tree, not by the component itself.
 class CNTextField extends StatefulWidget {
-  /// Creates a search text field.
-  const CNTextField.search({
+  /// Creates a native text field with Flutter-driven accessories.
+  const CNTextField({
     super.key,
     this.text = '',
     this.onChanged,
     this.onSubmitted,
-    this.onCancelled,
     this.onTap,
     this.placeholder,
     this.enabled = true,
-    this.showsCancelButton = false,
-    this.actions = const [],
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.height = 44.0,
-    this.tint,
-    this.backgroundColor,
-    this.fieldBackgroundColor,
-  }) : sendButtonBackgroundColor = null,
-       _isSearch = true,
-       assert(actions.length <= 2, 'CNTextField supports at most two actions.');
-
-  /// Creates a chat/composer text field.
-  const CNTextField.chat({
-    super.key,
-    this.text = '',
-    this.onChanged,
-    this.onSubmitted,
-    this.onCancelled,
-    this.onTap,
-    this.placeholder,
-    this.enabled = true,
-    this.actions = const [],
-    this.sendButtonBackgroundColor,
-    this.controller,
-    this.focusNode,
-    this.autofocus = false,
-    this.height = 44.0,
-    this.tint,
-    this.backgroundColor,
-    this.fieldBackgroundColor,
-  }) : showsCancelButton = false,
-       _isSearch = false,
-       assert(actions.length <= 2, 'CNTextField supports at most two actions.');
+    this.leading,
+    this.trailing = const [],
+    this.layout = const CNTextFieldLayout(),
+    this.style = const CNTextFieldStyle(),
+    this.textInputAction = TextInputAction.done,
+    this.keyboardType = TextInputType.text,
+  });
 
   /// Current text displayed by the field.
   final String text;
@@ -84,11 +115,8 @@ class CNTextField extends StatefulWidget {
   /// Called when the text changes due to user interaction.
   final ValueChanged<String>? onChanged;
 
-  /// Called when the user submits through the platform text input system.
+  /// Called when the user submits through the text input system.
   final ValueChanged<String>? onSubmitted;
-
-  /// Called when the cancel action is triggered.
-  final VoidCallback? onCancelled;
 
   /// Called when the field is tapped.
   final VoidCallback? onTap;
@@ -99,14 +127,6 @@ class CNTextField extends StatefulWidget {
   /// Whether the control is interactive.
   final bool enabled;
 
-  /// Whether to display the cancel button.
-  final bool showsCancelButton;
-
-  /// Optional trailing actions rendered inside the field.
-  ///
-  /// Supports up to two actions.
-  final List<CNTextFieldAction> actions;
-
   /// Optional text controller. When provided, [text] is ignored.
   final TextEditingController? controller;
 
@@ -116,38 +136,29 @@ class CNTextField extends StatefulWidget {
   /// Whether the field should request focus when inserted into the tree.
   final bool autofocus;
 
-  /// Minimum visual height of the field.
-  final double height;
+  /// Optional leading accessory rendered inside the field chrome.
+  final Widget? leading;
 
-  /// Background color for the chat send button.
-  final Color? sendButtonBackgroundColor;
+  /// Optional trailing accessories rendered inside the field chrome.
+  final List<Widget> trailing;
 
-  /// Accent/tint color.
-  final Color? tint;
+  /// Layout configuration for the field.
+  final CNTextFieldLayout layout;
 
-  /// Optional background color for the whole control container.
-  final Color? backgroundColor;
+  /// Visual styling configuration for the field.
+  final CNTextFieldStyle style;
 
-  /// Optional background color for the text field area.
-  final Color? fieldBackgroundColor;
+  /// Fallback text input action used on non-native platforms.
+  final TextInputAction textInputAction;
 
-  final bool _isSearch;
+  /// Fallback keyboard type used on non-native platforms.
+  final TextInputType keyboardType;
 
   @override
   State<CNTextField> createState() => _CNTextFieldState();
 }
 
 class _CNTextFieldState extends State<CNTextField> {
-  static const int _kAbsoluteMaxVisibleLines = 10;
-  static const double _kBorderRadius = 28.0;
-  static const double _kAccessorySize = 32.0;
-  static const double _kFieldHorizontalPadding = 16.0;
-  static const double _kFieldVerticalPadding = 8.0;
-  static const double _kTextOpticalVerticalOffset = 1.5;
-  static const double _kNativeMaxHeight = 240.0;
-  static const double _kSendButtonOuterInset = 8.0;
-  static const double _kSendButtonSizeBoost = 8.0;
-
   MethodChannel? _channel;
   late final TextEditingController _fallbackController;
   late final FocusNode _fallbackFocusNode;
@@ -157,35 +168,31 @@ class _CNTextFieldState extends State<CNTextField> {
 
   bool _isApplyingNativeTextChange = false;
   bool _isApplyingNativeFocusChange = false;
-  bool _hasSearchInteractionOccurred = false;
   double? _reportedNativeHeight;
   double? _pendingNativeHeight;
   bool _hasScheduledNativeHeightCommit = false;
+  double _leadingWidth = 0;
+  double _trailingWidth = 0;
 
   String? _lastText;
   String? _lastPlaceholder;
   bool? _lastEnabled;
-  bool? _lastIsSearch;
-  bool? _lastShowsCancelButton;
   bool? _lastIsDark;
   bool? _lastFocusEnabled;
-  int? _lastTint;
-  int? _lastBackground;
-  int? _lastFieldBackground;
-  int? _lastSendButtonBackground;
-  int? _lastPlaceholderColor;
-  double? _lastMinimumHeight;
-  String? _lastTraillingActionsSignature;
+  String? _lastBehaviorSignature;
+  String? _lastLayoutSignature;
+  String? _lastStyleSignature;
 
   TextEditingController get _textController =>
       widget.controller ?? _fallbackController;
 
   FocusNode get _focusNode => widget.focusNode ?? _fallbackFocusNode;
 
-  bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
+  CNTextFieldLayout get _layout => widget.layout;
 
-  Color? get _effectiveTint =>
-      widget.tint ?? CupertinoTheme.of(context).primaryColor;
+  CNTextFieldStyle get _style => widget.style;
+
+  bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
 
   bool get _isNativePlatform =>
       defaultTargetPlatform == TargetPlatform.iOS ||
@@ -194,45 +201,32 @@ class _CNTextFieldState extends State<CNTextField> {
   bool get _canInteractWithTextInput =>
       widget.enabled && _focusNode.canRequestFocus;
 
+  Color get _effectiveTint =>
+      _style.tint ?? CupertinoTheme.of(context).primaryColor;
+
+  double get _configuredMaxHeight =>
+      math.max(_layout.height, _layout.maxHeight);
+
   double get _minimumHeight {
     final min = defaultTargetPlatform == TargetPlatform.macOS ? 28.0 : 36.0;
-    return widget.height.clamp(min, _kNativeMaxHeight).toDouble();
+    return _layout.height.clamp(min, _configuredMaxHeight).toDouble();
   }
 
   double get _effectiveNativeHeight => (_reportedNativeHeight ?? _minimumHeight)
-      .clamp(_minimumHeight, _kNativeMaxHeight)
+      .clamp(_minimumHeight, _configuredMaxHeight)
       .toDouble();
 
-  bool get _isSearchMode => widget._isSearch;
+  int get _effectiveMaxVisibleLines => math.max(1, _layout.maxVisibleLines);
 
-  bool get _showsClearButton =>
-      _isSearchMode && widget.enabled && _textController.text.isNotEmpty;
+  bool get _hasLeadingAccessory => widget.leading != null;
 
-  bool get _showsSendButton =>
-      !_isSearchMode && widget.enabled && _textController.text.isNotEmpty;
+  bool get _hasTrailingAccessories => widget.trailing.isNotEmpty;
 
-  bool get _showsActions {
-    if (widget.actions.isEmpty) return false;
-    if (_isSearchMode) {
-      return _textController.text.isEmpty &&
-          (!_hasSearchInteractionOccurred || _focusNode.hasFocus);
-    }
-    return _textController.text.isEmpty;
-  }
+  double get _leadingReservedWidth =>
+      _hasLeadingAccessory ? _leadingWidth + _layout.accessoryGap : 0.0;
 
-  int get _effectiveMaxLines => _isSearchMode ? 1 : _kAbsoluteMaxVisibleLines;
-
-  Color? get _effectiveSendButtonBackgroundColor =>
-      widget.sendButtonBackgroundColor ?? _effectiveTint;
-
-  Color _resolvedPlaceholderColor(BuildContext context) {
-    final base = CupertinoDynamicColor.resolve(
-      CupertinoTheme.of(context).textTheme.textStyle.color ??
-          CupertinoColors.label,
-      context,
-    );
-    return base.withValues(alpha: _isDark ? 0.44 : 0.34);
-  }
+  double get _trailingReservedWidth =>
+      _hasTrailingAccessories ? _trailingWidth + _layout.accessoryGap : 0.0;
 
   @override
   void initState() {
@@ -246,10 +240,6 @@ class _CNTextFieldState extends State<CNTextField> {
   @override
   void didUpdateWidget(covariant CNTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    if (!oldWidget._isSearch && widget._isSearch) {
-      _hasSearchInteractionOccurred = false;
-    }
 
     if (oldWidget.controller != widget.controller) {
       _unobserveController(oldWidget.controller ?? _fallbackController);
@@ -322,9 +312,6 @@ class _CNTextFieldState extends State<CNTextField> {
   }
 
   void _onFocusNodeChanged() {
-    if (_isSearchMode && _focusNode.hasFocus) {
-      _hasSearchInteractionOccurred = true;
-    }
     if (_isNativePlatform && !_isApplyingNativeFocusChange) {
       _syncFocusToNativeIfNeeded();
     }
@@ -375,7 +362,9 @@ class _CNTextFieldState extends State<CNTextField> {
   }
 
   void _applyNativeHeight(double height) {
-    final resolved = height.clamp(_minimumHeight, _kNativeMaxHeight).toDouble();
+    final resolved = height
+        .clamp(_minimumHeight, _configuredMaxHeight)
+        .toDouble();
     if (!mounted) return;
 
     final currentReportedHeight = _reportedNativeHeight ?? _minimumHeight;
@@ -445,30 +434,77 @@ class _CNTextFieldState extends State<CNTextField> {
     await channel.invokeMethod('focus');
   }
 
+  String _jsonSignature(Map<String, dynamic> value) => jsonEncode(value);
+
+  Color? _resolveDynamicColor(Color? color) {
+    if (color == null) return null;
+    return CupertinoDynamicColor.resolve(color, context);
+  }
+
+  Color _resolvedPlaceholderColor(BuildContext context) {
+    final explicit = _resolveDynamicColor(_style.placeholderColor);
+    if (explicit != null) return explicit;
+    final base = CupertinoDynamicColor.resolve(
+      CupertinoTheme.of(context).textTheme.textStyle.color ??
+          CupertinoColors.label,
+      context,
+    );
+    return base.withValues(alpha: _isDark ? 0.44 : 0.34);
+  }
+
+  Map<String, dynamic> _encodeBehavior() {
+    return <String, dynamic>{
+      'showsLeadingAccessory': false,
+      'leadingAccessoryTriggersSubmit': false,
+      'showsCancelButton': false,
+      'clearButtonVisibility': 'never',
+      'sendButtonVisibility': 'never',
+      'trailingActionsVisibility': 'never',
+      'trailingAccessoryOrder': const <String>[],
+      'maxVisibleLines': _effectiveMaxVisibleLines,
+    };
+  }
+
+  Map<String, dynamic> _encodeLayout() {
+    return <String, dynamic>{
+      'height': _layout.height,
+      'maxHeight': _layout.maxHeight,
+      'borderRadius': _layout.borderRadius,
+      'fieldHorizontalPadding': _layout.fieldHorizontalPadding,
+      'fieldVerticalPadding': _layout.fieldVerticalPadding,
+      'textOpticalVerticalOffset': _layout.textOpticalVerticalOffset,
+      'leadingReservedWidth': _leadingReservedWidth,
+      'trailingReservedWidth': _trailingReservedWidth,
+    };
+  }
+
+  Map<String, dynamic> _encodeStyle() {
+    return <String, dynamic>{
+      'tint': resolveColorToArgb(_effectiveTint, context),
+      'backgroundColor': resolveColorToArgb(_style.backgroundColor, context),
+      'fieldBackgroundColor': resolveColorToArgb(
+        _style.fieldBackgroundColor,
+        context,
+      ),
+      'fieldOverlayColor': resolveColorToArgb(
+        _style.fieldOverlayColor,
+        context,
+      ),
+      'fieldBorderColor': resolveColorToArgb(_style.fieldBorderColor, context),
+      'placeholderColor': resolveColorToArgb(_style.placeholderColor, context),
+      'disabledOpacity': _style.disabledOpacity,
+    };
+  }
+
   void _cacheCurrentProps() {
     _lastText = _textController.text;
     _lastPlaceholder = widget.placeholder;
     _lastEnabled = widget.enabled;
-    _lastIsSearch = _isSearchMode;
-    _lastShowsCancelButton = widget.showsCancelButton;
     _lastIsDark = _isDark;
     _lastFocusEnabled = _canInteractWithTextInput;
-    _lastTint = resolveColorToArgb(_effectiveTint, context);
-    _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
-    _lastFieldBackground = resolveColorToArgb(
-      widget.fieldBackgroundColor,
-      context,
-    );
-    _lastSendButtonBackground = resolveColorToArgb(
-      _effectiveSendButtonBackgroundColor,
-      context,
-    );
-    _lastPlaceholderColor = resolveColorToArgb(
-      _resolvedPlaceholderColor(context),
-      context,
-    );
-    _lastMinimumHeight = _minimumHeight;
-    _lastTraillingActionsSignature = _traillingActionsSignature(widget.actions);
+    _lastBehaviorSignature = _jsonSignature(_encodeBehavior());
+    _lastLayoutSignature = _jsonSignature(_encodeLayout());
+    _lastStyleSignature = _jsonSignature(_encodeStyle());
   }
 
   Future<void> _syncPropsToNativeIfNeeded() async {
@@ -478,25 +514,10 @@ class _CNTextFieldState extends State<CNTextField> {
     final text = _textController.text;
     final placeholder = widget.placeholder;
     final enabled = widget.enabled;
-    final isSearch = _isSearchMode;
-    final showsCancelButton = widget.showsCancelButton;
-    final minimumHeight = _minimumHeight;
     final focusEnabled = _canInteractWithTextInput;
-    final tint = resolveColorToArgb(_effectiveTint, context);
-    final bg = resolveColorToArgb(widget.backgroundColor, context);
-    final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
-    final sendButtonBackground = resolveColorToArgb(
-      _effectiveSendButtonBackgroundColor,
-      context,
-    );
-    final placeholderColor = resolveColorToArgb(
-      _resolvedPlaceholderColor(context),
-      context,
-    );
-    final traillingActions = widget.actions;
-    final traillingActionsSignature = _traillingActionsSignature(
-      traillingActions,
-    );
+    final behaviorSignature = _jsonSignature(_encodeBehavior());
+    final layoutSignature = _jsonSignature(_encodeLayout());
+    final styleSignature = _jsonSignature(_encodeStyle());
 
     if (_lastText != text) {
       await channel.invokeMethod('setText', {'text': text});
@@ -515,30 +536,26 @@ class _CNTextFieldState extends State<CNTextField> {
       _lastEnabled = enabled;
     }
 
-    if (_lastIsSearch != isSearch) {
-      await channel.invokeMethod('setMode', {'isSearch': isSearch});
-      _lastIsSearch = isSearch;
+    if (_lastBehaviorSignature != behaviorSignature) {
+      await channel.invokeMethod('setBehavior', {
+        'behavior': _encodeBehavior(),
+      });
+      _lastBehaviorSignature = behaviorSignature;
     }
 
-    if (_lastShowsCancelButton != showsCancelButton) {
-      await channel.invokeMethod('setShowsCancelButton', {
-        'showsCancelButton': showsCancelButton,
-      });
-      _lastShowsCancelButton = showsCancelButton;
-    }
-
-    if (_lastMinimumHeight != minimumHeight) {
-      await channel.invokeMethod('setMinHeight', {
-        'minHeight': minimumHeight,
-        'maxHeight': _kNativeMaxHeight,
-        'maxVisibleLines': _effectiveMaxLines,
-      });
-      _lastMinimumHeight = minimumHeight;
-      if ((_reportedNativeHeight ?? 0) < minimumHeight && mounted) {
+    if (_lastLayoutSignature != layoutSignature) {
+      await channel.invokeMethod('setLayout', {'layout': _encodeLayout()});
+      _lastLayoutSignature = layoutSignature;
+      if ((_reportedNativeHeight ?? 0) < _minimumHeight && mounted) {
         setState(() {
-          _reportedNativeHeight = minimumHeight;
+          _reportedNativeHeight = _minimumHeight;
         });
       }
+    }
+
+    if (_lastStyleSignature != styleSignature) {
+      await channel.invokeMethod('setStyle', _encodeStyle());
+      _lastStyleSignature = styleSignature;
     }
 
     if (_lastFocusEnabled != focusEnabled) {
@@ -550,38 +567,6 @@ class _CNTextFieldState extends State<CNTextField> {
         await channel.invokeMethod('unfocus');
       }
     }
-
-    if (_lastTraillingActionsSignature != traillingActionsSignature) {
-      await channel.invokeMethod('setTrailingActions', {
-        'traillingActions': _encodeTraillingActions(traillingActions),
-      });
-      _lastTraillingActionsSignature = traillingActionsSignature;
-    }
-
-    final style = <String, dynamic>{};
-    if (_lastTint != tint && tint != null) {
-      style['tint'] = tint;
-      _lastTint = tint;
-    }
-    if (_lastBackground != bg && bg != null) {
-      style['backgroundColor'] = bg;
-      _lastBackground = bg;
-    }
-    if (_lastFieldBackground != fieldBg && fieldBg != null) {
-      style['fieldBackgroundColor'] = fieldBg;
-      _lastFieldBackground = fieldBg;
-    }
-    if (_lastSendButtonBackground != sendButtonBackground) {
-      style['sendButtonBackgroundColor'] = sendButtonBackground;
-      _lastSendButtonBackground = sendButtonBackground;
-    }
-    if (_lastPlaceholderColor != placeholderColor && placeholderColor != null) {
-      style['placeholderColor'] = placeholderColor;
-      _lastPlaceholderColor = placeholderColor;
-    }
-    if (style.isNotEmpty) {
-      await channel.invokeMethod('setStyle', style);
-    }
   }
 
   Future<void> _syncBrightnessIfNeeded() async {
@@ -589,46 +574,9 @@ class _CNTextFieldState extends State<CNTextField> {
     if (channel == null) return;
 
     final isDark = _isDark;
-    final tint = resolveColorToArgb(_effectiveTint, context);
-    final bg = resolveColorToArgb(widget.backgroundColor, context);
-    final fieldBg = resolveColorToArgb(widget.fieldBackgroundColor, context);
-    final sendButtonBackground = resolveColorToArgb(
-      _effectiveSendButtonBackgroundColor,
-      context,
-    );
-    final placeholderColor = resolveColorToArgb(
-      _resolvedPlaceholderColor(context),
-      context,
-    );
-
     if (_lastIsDark != isDark) {
       await channel.invokeMethod('setBrightness', {'isDark': isDark});
       _lastIsDark = isDark;
-    }
-
-    final style = <String, dynamic>{};
-    if (_lastTint != tint && tint != null) {
-      style['tint'] = tint;
-      _lastTint = tint;
-    }
-    if (_lastBackground != bg && bg != null) {
-      style['backgroundColor'] = bg;
-      _lastBackground = bg;
-    }
-    if (_lastFieldBackground != fieldBg && fieldBg != null) {
-      style['fieldBackgroundColor'] = fieldBg;
-      _lastFieldBackground = fieldBg;
-    }
-    if (_lastSendButtonBackground != sendButtonBackground) {
-      style['sendButtonBackgroundColor'] = sendButtonBackground;
-      _lastSendButtonBackground = sendButtonBackground;
-    }
-    if (_lastPlaceholderColor != placeholderColor && placeholderColor != null) {
-      style['placeholderColor'] = placeholderColor;
-      _lastPlaceholderColor = placeholderColor;
-    }
-    if (style.isNotEmpty) {
-      await channel.invokeMethod('setStyle', style);
     }
   }
 
@@ -637,7 +585,9 @@ class _CNTextFieldState extends State<CNTextField> {
     _channel = channel;
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
-    _lastTraillingActionsSignature = null;
+    _lastBehaviorSignature = null;
+    _lastLayoutSignature = null;
+    _lastStyleSignature = null;
     _syncBrightnessIfNeeded();
     _syncPropsToNativeIfNeeded();
     if (_focusNode.hasFocus && _canInteractWithTextInput) {
@@ -670,9 +620,6 @@ class _CNTextFieldState extends State<CNTextField> {
         final text = (args?['text'] as String?) ?? _textController.text;
         widget.onSubmitted?.call(text);
         break;
-      case 'cancelled':
-        widget.onCancelled?.call();
-        break;
       case 'tapped':
         widget.onTap?.call();
         break;
@@ -680,14 +627,26 @@ class _CNTextFieldState extends State<CNTextField> {
         final focused = args?['focused'] == true;
         _applyNativeFocus(focused);
         break;
-      case 'trailingActionPressed':
-        final index = (args?['index'] as num?)?.toInt();
-        if (index != null && index >= 0 && index < widget.actions.length) {
-          widget.actions[index].onPressed();
-        }
-        break;
     }
     return null;
+  }
+
+  void _updateLeadingWidth(Size size) {
+    final width = size.width;
+    if ((_leadingWidth - width).abs() < 0.5) return;
+    setState(() {
+      _leadingWidth = width;
+    });
+    _syncPropsToNativeIfNeeded();
+  }
+
+  void _updateTrailingWidth(Size size) {
+    final width = size.width;
+    if ((_trailingWidth - width).abs() < 0.5) return;
+    setState(() {
+      _trailingWidth = width;
+    });
+    _syncPropsToNativeIfNeeded();
   }
 
   @override
@@ -708,36 +667,11 @@ class _CNTextFieldState extends State<CNTextField> {
       'text': _textController.text,
       'placeholder': widget.placeholder,
       'enabled': widget.enabled,
-      'isSearch': _isSearchMode,
-      'showsCancelButton': widget.showsCancelButton,
-      'minHeight': _minimumHeight,
-      'maxHeight': _kNativeMaxHeight,
-      'maxVisibleLines': _effectiveMaxLines,
       'focusEnabled': _canInteractWithTextInput,
-      'traillingActions': _encodeTraillingActions(widget.actions),
       'isDark': _isDark,
-      'style': encodeStyle(context, tint: _effectiveTint)
-        ..addAll({
-          'placeholderColor': resolveColorToArgb(
-            _resolvedPlaceholderColor(context),
-            context,
-          ),
-          if (widget.backgroundColor != null)
-            'backgroundColor': resolveColorToArgb(
-              widget.backgroundColor,
-              context,
-            ),
-          if (widget.fieldBackgroundColor != null)
-            'fieldBackgroundColor': resolveColorToArgb(
-              widget.fieldBackgroundColor,
-              context,
-            ),
-          if (_effectiveSendButtonBackgroundColor != null)
-            'sendButtonBackgroundColor': resolveColorToArgb(
-              _effectiveSendButtonBackgroundColor,
-              context,
-            ),
-        }),
+      'behavior': _encodeBehavior(),
+      'layout': _encodeLayout(),
+      'style': _encodeStyle(),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
@@ -763,14 +697,61 @@ class _CNTextFieldState extends State<CNTextField> {
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
         alignment: Alignment.bottomCenter,
-        child: SizedBox(height: _effectiveNativeHeight, child: platformView),
+        child: SizedBox(
+          height: _effectiveNativeHeight,
+          child: _buildFieldOverlay(context, child: platformView),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldOverlay(BuildContext context, {required Widget child}) {
+    final leading = widget.leading;
+    final trailing = widget.trailing;
+    final leadingInset = math.max(0.0, _layout.fieldHorizontalPadding - 4);
+    final trailingInset = math.max(0.0, _layout.fieldHorizontalPadding - 2);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_layout.borderRadius),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          if (leading != null)
+            PositionedDirectional(
+              start: leadingInset,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _SizeObserver(
+                  onSize: _updateLeadingWidth,
+                  child: leading,
+                ),
+              ),
+            ),
+          if (trailing.isNotEmpty)
+            PositionedDirectional(
+              end: trailingInset,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _SizeObserver(
+                  onSize: _updateTrailingWidth,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: trailing,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
   Widget _buildFallback(BuildContext context) {
     final theme = CupertinoTheme.of(context);
-    final effectiveTint = widget.tint ?? theme.primaryColor;
+    final effectiveTint = _effectiveTint;
     final canInteractWithTextInput =
         widget.enabled && _focusNode.canRequestFocus;
 
@@ -782,19 +763,21 @@ class _CNTextFieldState extends State<CNTextField> {
       });
     }
 
-    final resolvedFieldBackground = CupertinoDynamicColor.resolve(
-      widget.fieldBackgroundColor ?? CupertinoColors.systemGrey5,
-      context,
+    final resolvedFieldBackground =
+        _resolveDynamicColor(
+          _style.fieldBackgroundColor ??
+              _style.fieldOverlayColor ??
+              CupertinoColors.systemGrey5,
+        ) ??
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    final resolvedFieldOverlayColor = _resolveDynamicColor(
+      _style.fieldOverlayColor,
+    );
+    final resolvedFieldBorderColor = _resolveDynamicColor(
+      _style.fieldBorderColor,
     );
     final resolvedPlaceholderColor = _resolvedPlaceholderColor(context);
-    final resolvedSecondaryLabel = CupertinoDynamicColor.resolve(
-      CupertinoColors.secondaryLabel,
-      context,
-    );
-    final resolvedSendButtonBackground = CupertinoDynamicColor.resolve(
-      _effectiveSendButtonBackgroundColor ?? effectiveTint,
-      context,
-    );
+    final resolvedDisabledOpacity = _style.disabledOpacity.clamp(0.0, 1.0);
 
     final textStyle = theme.textTheme.textStyle.copyWith(
       fontSize: 17,
@@ -806,22 +789,22 @@ class _CNTextFieldState extends State<CNTextField> {
       forceStrutHeight: true,
     );
     final lineHeight = (textStyle.fontSize ?? 17) * (textStyle.height ?? 1.0);
-    final minimumResolvedHeight = math.max(36.0, widget.height);
+    final minimumResolvedHeight = math.max(36.0, _layout.height);
     final effectiveTextVerticalPadding = math.max(
-      _kFieldVerticalPadding,
+      _layout.fieldVerticalPadding,
       (minimumResolvedHeight - lineHeight) / 2,
     );
     final effectiveTextTopPadding =
-        effectiveTextVerticalPadding + _kTextOpticalVerticalOffset;
+        effectiveTextVerticalPadding + _layout.textOpticalVerticalOffset;
     final effectiveTextBottomPadding = math.max(
       0.0,
-      effectiveTextVerticalPadding - _kTextOpticalVerticalOffset,
+      effectiveTextVerticalPadding - _layout.textOpticalVerticalOffset,
     );
     final minFieldHeight = math
         .max(
           36.0,
           math.max(
-            widget.height,
+            _layout.height,
             _fieldHeightForLines(lineHeight, 1, effectiveTextVerticalPadding),
           ),
         )
@@ -831,241 +814,138 @@ class _CNTextFieldState extends State<CNTextField> {
           minFieldHeight,
           _fieldHeightForLines(
             lineHeight,
-            _effectiveMaxLines,
+            _effectiveMaxVisibleLines,
             effectiveTextVerticalPadding,
           ),
         )
         .toDouble();
 
-    final actionWidgets = widget.actions
-        .take(2)
-        .map((action) {
-          final resolvedActionIconSize = _resolvedActionIconSize(
-            action.icon.size,
-          );
-          return _AccessoryButton(
-            onPressed: widget.enabled ? action.onPressed : null,
-            child: SizedBox.square(
-              dimension: resolvedActionIconSize,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: IconTheme.merge(
-                  data: IconThemeData(
-                    color: action.icon.color ?? effectiveTint,
-                    size: resolvedActionIconSize,
-                  ),
-                  child: action.icon,
-                ),
-              ),
-            ),
-          );
-        })
-        .toList(growable: false);
-
-    final textInputAction = _isSearchMode
-        ? TextInputAction.search
-        : TextInputAction.newline;
-    final keyboardType = _isSearchMode
-        ? TextInputType.text
-        : TextInputType.multiline;
-
-    final textField = LayoutBuilder(
-      builder: (context, constraints) {
-        final sendButtonDiameter = math.max(
-          0.0,
-          minFieldHeight - (_kSendButtonOuterInset * 2) + _kSendButtonSizeBoost,
-        );
-
-        Widget? trailingAccessory;
-        if (_isSearchMode) {
-          if (_showsClearButton) {
-            trailingAccessory = _AccessoryButton(
-              onPressed: _clearText,
-              foregroundColor: resolvedSecondaryLabel,
-                            child: Icon(
-                              CupertinoIcons.clear_thick_circled,
-                              size: 18,
-                              color: resolvedSecondaryLabel,
-              ),
-            );
-          } else if (_showsActions) {
-            trailingAccessory = Row(
-              mainAxisSize: MainAxisSize.min,
-              children: actionWidgets,
-            );
-          }
-        } else if (_showsSendButton) {
-          trailingAccessory = _SendButton(
-            diameter: sendButtonDiameter,
-            backgroundColor: resolvedSendButtonBackground,
-            onPressed: widget.enabled ? _handleSubmitPressed : null,
-          );
-        } else if (_showsActions) {
-          trailingAccessory = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: actionWidgets,
-          );
-        }
-
-        final showsCenteredSendButton =
-            _showsSendButton &&
-            _textFitsOnSingleLine(
-              maxWidth: constraints.maxWidth,
-              minFieldHeight: minFieldHeight,
-              textStyle: textStyle,
-              strutStyle: strutStyle,
-            );
-        final showsBottomAlignedSendButton =
-            _showsSendButton && !showsCenteredSendButton;
-        final fieldCrossAxisAlignment = showsBottomAlignedSendButton
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.center;
-        final accessoryBottomPadding = showsBottomAlignedSendButton
-            ? _kSendButtonOuterInset
-            : 0.0;
-        final accessoryEndPadding = _showsSendButton
-            ? _kSendButtonOuterInset
-            : _kFieldHorizontalPadding - 2;
-
-        return AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: minFieldHeight,
-              maxHeight: maxFieldHeight,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(_kBorderRadius),
-              child: DecoratedBox(
+    Widget content = AnimatedSize(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: minFieldHeight,
+          maxHeight: maxFieldHeight,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(_layout.borderRadius),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              DecoratedBox(
                 decoration: BoxDecoration(
                   color: resolvedFieldBackground,
-                  borderRadius: BorderRadius.circular(_kBorderRadius),
+                  borderRadius: BorderRadius.circular(_layout.borderRadius),
+                  border: resolvedFieldBorderColor == null
+                      ? null
+                      : Border.all(color: resolvedFieldBorderColor),
                 ),
-                child: Row(
-                  crossAxisAlignment: fieldCrossAxisAlignment,
-                  children: [
-                    if (_isSearchMode)
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: _kFieldHorizontalPadding - 4,
-                          end: 4,
-                        ),
-                        child: _AccessoryButton(
-                          onPressed: widget.enabled
-                              ? _handleSubmitPressed
-                              : null,
-                          foregroundColor: resolvedPlaceholderColor,
-                          child: Icon(
-                            CupertinoIcons.search,
-                            size: 18,
-                            color: resolvedPlaceholderColor,
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: CupertinoTheme(
-                        data: theme.copyWith(primaryColor: effectiveTint),
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(
-                            context,
-                          ).copyWith(scrollbars: false),
-                          child: CupertinoTextField.borderless(
-                            controller: _textController,
-                            focusNode: _focusNode,
-                            autofocus: widget.autofocus,
-                            enabled: widget.enabled,
-                            enableInteractiveSelection:
-                                canInteractWithTextInput,
-                            padding: EdgeInsetsDirectional.only(
-                              start: _isSearchMode
-                                  ? 0
-                                  : _kFieldHorizontalPadding,
-                              end: 4,
-                              top: effectiveTextTopPadding,
-                              bottom: effectiveTextBottomPadding,
-                            ),
-                            minLines: 1,
-                            maxLines: _isSearchMode ? 1 : null,
-                            keyboardType: keyboardType,
-                            textInputAction: textInputAction,
-                            style: textStyle,
-                            strutStyle: strutStyle,
-                            placeholder: widget.placeholder,
-                            placeholderStyle: textStyle.copyWith(
-                              color: resolvedPlaceholderColor,
-                            ),
-                            cursorColor: effectiveTint,
-                            onTap: widget.onTap,
-                            onChanged: widget.onChanged,
-                            onSubmitted: widget.onSubmitted,
-                            contextMenuBuilder: (context, editableTextState) {
-                              if (!canInteractWithTextInput) {
-                                return const SizedBox.shrink();
-                              }
-                              if (defaultTargetPlatform == TargetPlatform.iOS &&
-                                  SystemContextMenu.isSupported(context)) {
-                                return SystemContextMenu.editableText(
-                                  editableTextState: editableTextState,
-                                );
-                              }
-                              return CupertinoAdaptiveTextSelectionToolbar.editableText(
-                                editableTextState: editableTextState,
-                              );
-                            },
-                          ),
-                        ),
+              ),
+              if (resolvedFieldOverlayColor != null)
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: resolvedFieldOverlayColor,
+                      borderRadius: BorderRadius.circular(_layout.borderRadius),
+                    ),
+                  ),
+                ),
+              CupertinoTheme(
+                data: theme.copyWith(primaryColor: effectiveTint),
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(
+                    context,
+                  ).copyWith(scrollbars: false),
+                  child: CupertinoTextField.borderless(
+                    controller: _textController,
+                    focusNode: _focusNode,
+                    autofocus: widget.autofocus,
+                    enabled: widget.enabled,
+                    enableInteractiveSelection: canInteractWithTextInput,
+                    padding: EdgeInsetsDirectional.only(
+                      start:
+                          _layout.fieldHorizontalPadding +
+                          _leadingReservedWidth,
+                      end:
+                          _layout.fieldHorizontalPadding +
+                          _trailingReservedWidth,
+                      top: effectiveTextTopPadding,
+                      bottom: effectiveTextBottomPadding,
+                    ),
+                    minLines: 1,
+                    maxLines: _effectiveMaxVisibleLines == 1 ? 1 : null,
+                    keyboardType: widget.keyboardType,
+                    textInputAction: widget.textInputAction,
+                    style: textStyle,
+                    strutStyle: strutStyle,
+                    placeholder: widget.placeholder,
+                    placeholderStyle: textStyle.copyWith(
+                      color: resolvedPlaceholderColor,
+                    ),
+                    cursorColor: effectiveTint,
+                    onTap: widget.onTap,
+                    onChanged: widget.onChanged,
+                    onSubmitted: widget.onSubmitted,
+                    contextMenuBuilder: (context, editableTextState) {
+                      if (!canInteractWithTextInput) {
+                        return const SizedBox.shrink();
+                      }
+                      if (defaultTargetPlatform == TargetPlatform.iOS &&
+                          SystemContextMenu.isSupported(context)) {
+                        return SystemContextMenu.editableText(
+                          editableTextState: editableTextState,
+                        );
+                      }
+                      return CupertinoAdaptiveTextSelectionToolbar.editableText(
+                        editableTextState: editableTextState,
+                      );
+                    },
+                  ),
+                ),
+              ),
+              if (_hasLeadingAccessory)
+                PositionedDirectional(
+                  start: math.max(0.0, _layout.fieldHorizontalPadding - 4),
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: _SizeObserver(
+                      onSize: _updateLeadingWidth,
+                      child: widget.leading!,
+                    ),
+                  ),
+                ),
+              if (_hasTrailingAccessories)
+                PositionedDirectional(
+                  end: math.max(0.0, _layout.fieldHorizontalPadding - 2),
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: _SizeObserver(
+                      onSize: _updateTrailingWidth,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: widget.trailing,
                       ),
                     ),
-                    if (trailingAccessory != null)
-                      Padding(
-                        padding: EdgeInsetsDirectional.only(
-                          start: 4,
-                          end: accessoryEndPadding,
-                          bottom: accessoryBottomPadding,
-                        ),
-                        child: trailingAccessory,
-                      ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
 
-    Widget content = Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(child: textField),
-        if (_isSearchMode && widget.showsCancelButton) ...[
-          const SizedBox(width: 8),
-          CupertinoTheme(
-            data: theme.copyWith(primaryColor: effectiveTint),
-            child: CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-              minimumSize: const Size(28, 28),
-              onPressed: widget.enabled ? _handleCancelPressed : null,
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: effectiveTint),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-
-    if (widget.backgroundColor != null) {
+    if (_style.backgroundColor != null) {
       content = DecoratedBox(
         decoration: BoxDecoration(
           color: CupertinoDynamicColor.resolve(
-            widget.backgroundColor!,
+            _style.backgroundColor!,
             context,
           ),
-          borderRadius: BorderRadius.circular(_kBorderRadius),
+          borderRadius: BorderRadius.circular(_layout.borderRadius),
         ),
         child: Padding(padding: const EdgeInsets.all(4), child: content),
       );
@@ -1073,25 +953,9 @@ class _CNTextFieldState extends State<CNTextField> {
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 180),
-      opacity: widget.enabled ? 1 : 0.6,
+      opacity: widget.enabled ? 1 : resolvedDisabledOpacity,
       child: content,
     );
-  }
-
-  void _clearText() {
-    if (_textController.text.isEmpty) return;
-    _textController.clear();
-    widget.onChanged?.call('');
-  }
-
-  void _handleCancelPressed() {
-    _clearText();
-    _focusNode.unfocus();
-    widget.onCancelled?.call();
-  }
-
-  void _handleSubmitPressed() {
-    widget.onSubmitted?.call(_textController.text);
   }
 
   double _fieldHeightForLines(
@@ -1101,299 +965,40 @@ class _CNTextFieldState extends State<CNTextField> {
   ) {
     return lineHeight * lines + (verticalPadding * 2);
   }
+}
 
-  double _resolvedActionIconSize(double? requestedSize) {
-    final baseSize = requestedSize ?? 16.0;
-    return baseSize.clamp(8.0, _kAccessorySize - 4.0).toDouble();
+class _SizeObserver extends SingleChildRenderObjectWidget {
+  const _SizeObserver({required this.onSize, required super.child});
+
+  final ValueChanged<Size> onSize;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderSizeObserver(onSize);
   }
 
-  bool _textFitsOnSingleLine({
-    required double maxWidth,
-    required double minFieldHeight,
-    required TextStyle textStyle,
-    required StrutStyle strutStyle,
-  }) {
-    if (_isSearchMode || !_showsSendButton) {
-      return false;
-    }
-
-    final text = _textController.text;
-    if (text.isEmpty || text.contains('\n')) {
-      return !text.contains('\n');
-    }
-
-    if (!maxWidth.isFinite || maxWidth <= 0) {
-      return true;
-    }
-
-    final trailingWidth =
-        math.max(
-          0.0,
-          minFieldHeight - (_kSendButtonOuterInset * 2) + _kSendButtonSizeBoost,
-        ) +
-        12.0;
-    final textStartPadding = _kFieldHorizontalPadding;
-    final textEndPadding = 4.0;
-    final availableTextWidth =
-        maxWidth - textStartPadding - textEndPadding - trailingWidth;
-    if (availableTextWidth <= 0) {
-      return false;
-    }
-
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: textStyle),
-      strutStyle: strutStyle,
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 2,
-    )..layout(maxWidth: availableTextWidth);
-
-    return !painter.didExceedMaxLines;
-  }
-
-  List<Map<String, dynamic>> _encodeTraillingActions(
-    List<CNTextFieldAction> actions,
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderSizeObserver renderObject,
   ) {
-    return actions
-        .take(2)
-        .map((action) {
-          final icon = action.icon;
-          final iconData = icon.icon;
-          return <String, dynamic>{
-            'iconDataCodePoint': iconData?.codePoint,
-            'iconDataFontFamily': iconData?.fontFamily,
-            'iconDataFontPackage': iconData?.fontPackage,
-            'iconDataMatchTextDirection': iconData?.matchTextDirection ?? false,
-            'iconDataColor': resolveColorToArgb(icon.color, context),
-            'iconDataSize': icon.size,
-            'iconDataFill': icon.fill,
-            'iconDataWeight': icon.weight,
-            'iconDataGrade': icon.grade,
-            'iconDataOpticalSize': icon.opticalSize,
-          };
-        })
-        .toList(growable: false);
-  }
-
-  String _traillingActionsSignature(List<CNTextFieldAction> actions) {
-    return actions
-        .take(2)
-        .map((action) {
-          final icon = action.icon;
-          final iconData = icon.icon;
-          return [
-            iconData?.codePoint,
-            iconData?.fontFamily,
-            iconData?.fontPackage,
-            iconData?.matchTextDirection,
-            resolveColorToArgb(icon.color, context),
-            icon.size,
-            icon.fill,
-            icon.weight,
-            icon.grade,
-            icon.opticalSize,
-          ].map((value) => value?.toString() ?? 'null').join('|');
-        })
-        .join('||');
+    renderObject.onSize = onSize;
   }
 }
 
-class _AccessoryButton extends StatelessWidget {
-  const _AccessoryButton({
-    required this.onPressed,
-    required this.child,
-    this.foregroundColor,
-  });
+class _RenderSizeObserver extends RenderProxyBox {
+  _RenderSizeObserver(this.onSize);
 
-  final VoidCallback? onPressed;
-  final Widget child;
-  final Color? foregroundColor;
+  ValueChanged<Size> onSize;
+  Size? _lastSize;
 
   @override
-  Widget build(BuildContext context) {
-    final buttonChild = SizedBox.square(
-      dimension: _CNTextFieldState._kAccessorySize,
-      child: IconTheme.merge(
-        data: IconThemeData(color: foregroundColor),
-        child: Center(child: child),
-      ),
-    );
-
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      minimumSize: const Size.square(_CNTextFieldState._kAccessorySize),
-      onPressed: onPressed,
-      child: buttonChild,
-    );
-  }
-}
-
-class _SendButton extends StatelessWidget {
-  const _SendButton({
-    required this.diameter,
-    required this.backgroundColor,
-    required this.onPressed,
-  });
-
-  static const double _kIconSize = 16.0;
-
-  final double diameter;
-  final Color backgroundColor;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final resolvedDiameter = math.max(0.0, diameter);
-    return SizedBox.square(
-      dimension: resolvedDiameter,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: Size.zero,
-        onPressed: onPressed,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: Icon(
-              CupertinoIcons.arrow_up,
-              color: CupertinoColors.white,
-              size: _kIconSize,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Deprecated compatibility wrapper for [CNTextField].
-@Deprecated('Use CNTextField.search or CNTextField.chat instead.')
-class CNSearchBar extends StatelessWidget {
-  /// Creates a deprecated compatibility wrapper.
-  const CNSearchBar({
-    super.key,
-    this.text = '',
-    this.onChanged,
-    this.onSubmitted,
-    this.onCancelled,
-    this.onTap,
-    this.placeholder,
-    this.enabled = true,
-    this.showsSearchIcon = true,
-    this.showsCancelButton = false,
-    this.traillingActions = const [],
-    this.controller,
-    this.focusNode,
-    this.autofocus = false,
-    this.height = 44.0,
-    this.maxLines = 1,
-    this.tint,
-    this.backgroundColor,
-    this.fieldBackgroundColor,
-    this.sendButtonBackgroundColor,
-  });
-
-  /// Initial text value.
-  final String text;
-
-  /// Called when the text changes due to user interaction.
-  final ValueChanged<String>? onChanged;
-
-  /// Called when the user submits the current value.
-  final ValueChanged<String>? onSubmitted;
-
-  /// Called when the cancel action is triggered.
-  final VoidCallback? onCancelled;
-
-  /// Called when the field is tapped.
-  final VoidCallback? onTap;
-
-  /// Placeholder text.
-  final String? placeholder;
-
-  /// Whether the control is interactive.
-  final bool enabled;
-
-  /// Whether the deprecated wrapper should build in search mode.
-  final bool showsSearchIcon;
-
-  /// Whether to show the cancel button.
-  final bool showsCancelButton;
-
-  /// Trailing actions for the field.
-  final List<CNSearchBarAction> traillingActions;
-
-  /// External controller for the text value.
-  final TextEditingController? controller;
-
-  /// External focus node for the field.
-  final FocusNode? focusNode;
-
-  /// Whether the field should request focus automatically.
-  final bool autofocus;
-
-  /// Minimum visual height of the field.
-  final double height;
-
-  /// Deprecated max lines input kept for compatibility.
-  final int maxLines;
-
-  /// Accent color.
-  final Color? tint;
-
-  /// Optional container background color.
-  final Color? backgroundColor;
-
-  /// Optional field background color.
-  final Color? fieldBackgroundColor;
-
-  /// Optional send button background color for chat mode.
-  final Color? sendButtonBackgroundColor;
-
-  @override
-  Widget build(BuildContext context) {
-    if (showsSearchIcon) {
-      return CNTextField.search(
-        key: key,
-        text: text,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        onCancelled: onCancelled,
-        onTap: onTap,
-        placeholder: placeholder,
-        enabled: enabled,
-        showsCancelButton: showsCancelButton,
-        actions: traillingActions,
-        controller: controller,
-        focusNode: focusNode,
-        autofocus: autofocus,
-        height: height,
-        tint: tint,
-        backgroundColor: backgroundColor,
-        fieldBackgroundColor: fieldBackgroundColor,
-      );
-    }
-
-    return CNTextField.chat(
-      key: key,
-      text: text,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      onCancelled: onCancelled,
-      onTap: onTap,
-      placeholder: placeholder,
-      enabled: enabled,
-      actions: traillingActions,
-      sendButtonBackgroundColor: sendButtonBackgroundColor,
-      controller: controller,
-      focusNode: focusNode,
-      autofocus: autofocus,
-      height: height,
-      tint: tint,
-      backgroundColor: backgroundColor,
-      fieldBackgroundColor: fieldBackgroundColor,
-    );
+  void performLayout() {
+    super.performLayout();
+    if (size == _lastSize) return;
+    _lastSize = size;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      onSize(size);
+    });
   }
 }

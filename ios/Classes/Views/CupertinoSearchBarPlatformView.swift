@@ -68,11 +68,16 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private let cancelButton: UIButton
   private var glassHostingController: UIHostingController<AnyView>?
   private var leadingSearchWidthConstraint: NSLayoutConstraint!
+  private var searchButtonHeightConstraint: NSLayoutConstraint!
   private var searchButtonCenterYConstraint: NSLayoutConstraint!
   private var trailingStackFirstLineCenterYConstraint: NSLayoutConstraint!
   private var trailingStackCenterYConstraint: NSLayoutConstraint!
   private var trailingStackTrailingConstraint: NSLayoutConstraint!
   private var trailingStackBottomConstraint: NSLayoutConstraint!
+  private var clearButtonWidthConstraint: NSLayoutConstraint!
+  private var clearButtonHeightConstraint: NSLayoutConstraint!
+  private var trailingButtonWidthConstraints: [NSLayoutConstraint] = []
+  private var trailingButtonHeightConstraints: [NSLayoutConstraint] = []
   private var sendButtonWidthConstraint: NSLayoutConstraint!
   private var sendButtonHeightConstraint: NSLayoutConstraint!
   private var placeholderTopConstraint: NSLayoutConstraint!
@@ -83,29 +88,48 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var currentTint: UIColor?
   private var customBackgroundColor: UIColor?
   private var customFieldBackgroundColor: UIColor?
+  private var customFieldOverlayColor: UIColor?
+  private var customFieldBorderColor: UIColor?
   private var customSendButtonBackgroundColor: UIColor?
+  private var customSendButtonForegroundColor: UIColor?
   private var customPlaceholderColor: UIColor?
+  private var customLeadingAccessoryColor: UIColor?
+  private var customClearButtonColor: UIColor?
+  private var customCancelButtonColor: UIColor?
   private var controlEnabled = true
   private var focusEnabled = true
-  private var isSearchMode = true
+  private var showsLeadingAccessory = false
+  private var leadingAccessoryTriggersSubmit = false
+  private var clearButtonVisibilityRule = "whileNotEmpty"
+  private var sendButtonVisibilityRule = "never"
+  private var trailingActionsVisibilityRule = "whileEmpty"
+  private var trailingAccessoryOrder: [String] = ["clear", "actions", "send"]
   private var showsCancelButton = false
+  private var cancelButtonText = "Cancel"
   private var requestedMinHeight: CGFloat = 44
   private var requestedMaxHeight: CGFloat = 240
   private var maxVisibleLines = 1
   private var lastReportedHeight: CGFloat = 0
   private var isDarkAppearance = false
   private var isApplyingProgrammaticText = false
-  private var hasInteractedWithSearchField = false
+  private var hasInteractedWithField = false
+  private var leadingAccessoryIcon: TrailingAction?
+  private var clearButtonIcon: TrailingAction?
+  private var sendButtonIcon: TrailingAction?
+  private var disabledOpacity: CGFloat = 0.6
 
-  private let compactHorizontalPadding: CGFloat = 16
-  private let compactVerticalPadding: CGFloat = 8
-  private let textOpticalVerticalOffset: CGFloat = 1.5
-  private let fieldCornerRadius: CGFloat = 28
-  private let accessoryButtonSize: CGFloat = 32
-  private let sendButtonOuterInset: CGFloat = 8
+  private var compactHorizontalPadding: CGFloat = 16
+  private var compactVerticalPadding: CGFloat = 8
+  private var textOpticalVerticalOffset: CGFloat = 1.5
+  private var fieldCornerRadius: CGFloat = 28
+  private var accessoryButtonSize: CGFloat = 32
+  private var sendButtonOuterInset: CGFloat = 8
   private let sendButtonContentInset: CGFloat = 4
-  private let sendButtonIconSize: CGFloat = 16
-  private let sendButtonDiameterBoost: CGFloat = 8
+  private let defaultSendButtonIconSize: CGFloat = 16
+  private var sendButtonDiameterBoost: CGFloat = 8
+  private var trailingSpacing: CGFloat = 6
+  private var leadingReservedWidth: CGFloat = 0
+  private var trailingReservedWidth: CGFloat = 0
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let clearButton = UIButton(type: .system)
     let firstTrailingButton = UIButton(type: .system)
@@ -127,47 +151,151 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     self.searchButton = searchButton
     self.cancelButton = cancelButton
 
-    var text: String = ""
-    var placeholder: String? = nil
-    var enabled: Bool = true
-    var isSearchMode: Bool = true
-    var showsCancelButton: Bool = false
-    var minHeight: CGFloat = 44
-    var maxHeight: CGFloat = 240
-    var maxVisibleLines: Int = 1
-    var focusEnabled: Bool = true
-    var isDark: Bool = false
-    var tint: UIColor? = nil
-    var bg: UIColor? = nil
-    var fieldBg: UIColor? = nil
-    var sendButtonBg: UIColor? = nil
-    var placeholderColor: UIColor? = nil
-    var trailingActions: [TrailingAction] = []
+	    var text: String = ""
+	    var placeholder: String? = nil
+	    var enabled: Bool = true
+	    var isSearchMode: Bool = true
+	    var showsCancelButton: Bool = false
+	    var showsLeadingAccessory: Bool = false
+	    var leadingAccessoryTriggersSubmit: Bool = false
+	    var clearButtonVisibilityRule = "whileNotEmpty"
+	    var sendButtonVisibilityRule = "never"
+	    var trailingActionsVisibilityRule = "whileEmpty"
+	    var trailingAccessoryOrder = ["clear", "actions", "send"]
+	    var cancelButtonText = "Cancel"
+	    var minHeight: CGFloat = 44
+	    var maxHeight: CGFloat = 240
+	    var maxVisibleLines: Int = 1
+	    var focusEnabled: Bool = true
+	    var isDark: Bool = false
+	    var tint: UIColor? = nil
+	    var bg: UIColor? = nil
+	    var fieldBg: UIColor? = nil
+	    var fieldOverlayColor: UIColor? = nil
+	    var fieldBorderColor: UIColor? = nil
+	    var sendButtonBg: UIColor? = nil
+	    var sendButtonFg: UIColor? = nil
+	    var placeholderColor: UIColor? = nil
+	    var leadingAccessoryColor: UIColor? = nil
+	    var clearButtonColor: UIColor? = nil
+	    var cancelButtonColor: UIColor? = nil
+	    var disabledOpacity: CGFloat = 0.6
+	    var borderRadius: CGFloat = 28
+	    var accessoryButtonSize: CGFloat = 32
+	    var fieldHorizontalPadding: CGFloat = 16
+	    var fieldVerticalPadding: CGFloat = 8
+	    var textOpticalVerticalOffset: CGFloat = 1.5
+	    var sendButtonOuterInset: CGFloat = 8
+	    var sendButtonDiameterBoost: CGFloat = 8
+	    var trailingSpacing: CGFloat = 6
+	    var leadingReservedWidth: CGFloat = 0
+	    var trailingReservedWidth: CGFloat = 0
+	    var leadingIcon: TrailingAction? = nil
+	    var clearIcon: TrailingAction? = nil
+	    var sendIcon: TrailingAction? = nil
+	    var trailingActions: [TrailingAction] = []
 
-    if let dict = args as? [String: Any] {
-      if let value = dict["text"] as? String { text = value }
-      if let value = dict["placeholder"] as? String { placeholder = value }
+	    if let dict = args as? [String: Any] {
+	      if let value = dict["text"] as? String { text = value }
+	      if let value = dict["placeholder"] as? String { placeholder = value }
       if let value = dict["enabled"] as? NSNumber { enabled = value.boolValue }
       if let value = dict["isSearch"] as? NSNumber { isSearchMode = value.boolValue }
       if let value = dict["showsCancelButton"] as? NSNumber { showsCancelButton = value.boolValue }
       if let value = dict["minHeight"] as? NSNumber { minHeight = CGFloat(truncating: value) }
-      if let value = dict["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
-      if let value = dict["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
-      if let value = dict["focusEnabled"] as? NSNumber { focusEnabled = value.boolValue }
-      if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
-      if let style = dict["style"] as? [String: Any] {
-        if let value = style["tint"] as? NSNumber { tint = Self.colorFromARGB(value.intValue) }
-        if let value = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(value.intValue) }
-        if let value = style["fieldBackgroundColor"] as? NSNumber { fieldBg = Self.colorFromARGB(value.intValue) }
-        if let value = style["sendButtonBackgroundColor"] as? NSNumber {
-          sendButtonBg = Self.colorFromARGB(value.intValue)
-        }
-        if let value = style["placeholderColor"] as? NSNumber {
-          placeholderColor = Self.colorFromARGB(value.intValue)
-        }
-      }
-      trailingActions = Self.parseTrailingActions(dict["traillingActions"])
-    }
+	      if let value = dict["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
+	      if let value = dict["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
+	      if let value = dict["focusEnabled"] as? NSNumber { focusEnabled = value.boolValue }
+	      if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
+	      if let behavior = dict["behavior"] as? [String: Any] {
+	        if let value = (behavior["showsLeadingAccessory"] as? NSNumber)?.boolValue {
+	          showsLeadingAccessory = value
+	        }
+	        if let value = (behavior["leadingAccessoryTriggersSubmit"] as? NSNumber)?.boolValue {
+	          leadingAccessoryTriggersSubmit = value
+	        }
+	        if let value = (behavior["showsCancelButton"] as? NSNumber)?.boolValue {
+	          showsCancelButton = value
+	        }
+	        if let value = behavior["clearButtonVisibility"] as? String {
+	          clearButtonVisibilityRule = value
+	        }
+	        if let value = behavior["sendButtonVisibility"] as? String {
+	          sendButtonVisibilityRule = value
+	        }
+	        if let value = behavior["trailingActionsVisibility"] as? String {
+	          trailingActionsVisibilityRule = value
+	        }
+	        if let value = behavior["trailingAccessoryOrder"] as? [String], !value.isEmpty {
+	          trailingAccessoryOrder = value
+	        }
+	        if let value = behavior["maxVisibleLines"] as? NSNumber {
+	          maxVisibleLines = value.intValue
+	        }
+	      }
+	      if let layout = dict["layout"] as? [String: Any] {
+	        if let value = layout["height"] as? NSNumber { minHeight = CGFloat(truncating: value) }
+	        if let value = layout["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
+	        if let value = layout["borderRadius"] as? NSNumber { borderRadius = CGFloat(truncating: value) }
+	        if let value = layout["accessoryButtonSize"] as? NSNumber { accessoryButtonSize = CGFloat(truncating: value) }
+	        if let value = layout["fieldHorizontalPadding"] as? NSNumber { fieldHorizontalPadding = CGFloat(truncating: value) }
+	        if let value = layout["fieldVerticalPadding"] as? NSNumber { fieldVerticalPadding = CGFloat(truncating: value) }
+	        if let value = layout["textOpticalVerticalOffset"] as? NSNumber { textOpticalVerticalOffset = CGFloat(truncating: value) }
+	        if let value = layout["sendButtonOuterInset"] as? NSNumber { sendButtonOuterInset = CGFloat(truncating: value) }
+	        if let value = layout["sendButtonSizeBoost"] as? NSNumber { sendButtonDiameterBoost = CGFloat(truncating: value) }
+	        if let value = layout["trailingSpacing"] as? NSNumber { trailingSpacing = CGFloat(truncating: value) }
+	        if let value = layout["leadingReservedWidth"] as? NSNumber { leadingReservedWidth = CGFloat(truncating: value) }
+	        if let value = layout["trailingReservedWidth"] as? NSNumber { trailingReservedWidth = CGFloat(truncating: value) }
+	      }
+	      if let strings = dict["strings"] as? [String: Any] {
+	        if let value = strings["cancelButtonText"] as? String {
+	          cancelButtonText = value
+	        }
+	      }
+	      if let style = dict["style"] as? [String: Any] {
+	        if let value = style["tint"] as? NSNumber { tint = Self.colorFromARGB(value.intValue) }
+	        if let value = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(value.intValue) }
+	        if let value = style["fieldBackgroundColor"] as? NSNumber { fieldBg = Self.colorFromARGB(value.intValue) }
+	        if let value = style["fieldOverlayColor"] as? NSNumber { fieldOverlayColor = Self.colorFromARGB(value.intValue) }
+	        if let value = style["fieldBorderColor"] as? NSNumber { fieldBorderColor = Self.colorFromARGB(value.intValue) }
+	        if let value = style["sendButtonBackgroundColor"] as? NSNumber {
+	          sendButtonBg = Self.colorFromARGB(value.intValue)
+	        }
+	        if let value = style["sendButtonForegroundColor"] as? NSNumber {
+	          sendButtonFg = Self.colorFromARGB(value.intValue)
+	        }
+	        if let value = style["placeholderColor"] as? NSNumber {
+	          placeholderColor = Self.colorFromARGB(value.intValue)
+	        }
+	        if let value = style["leadingAccessoryColor"] as? NSNumber {
+	          leadingAccessoryColor = Self.colorFromARGB(value.intValue)
+	        }
+	        if let value = style["clearButtonColor"] as? NSNumber {
+	          clearButtonColor = Self.colorFromARGB(value.intValue)
+	        }
+	        if let value = style["cancelButtonColor"] as? NSNumber {
+	          cancelButtonColor = Self.colorFromARGB(value.intValue)
+	        }
+	        if let value = style["disabledOpacity"] as? NSNumber {
+	          disabledOpacity = CGFloat(truncating: value)
+	        }
+	      }
+	      if let icons = dict["icons"] as? [String: Any] {
+	        leadingIcon = Self.parseAccessoryIcon(icons["leading"])
+	        clearIcon = Self.parseAccessoryIcon(icons["clear"])
+	        sendIcon = Self.parseAccessoryIcon(icons["send"])
+	      }
+	      trailingActions = Self.parseTrailingActions(dict["traillingActions"])
+	      if dict["behavior"] == nil {
+	        showsLeadingAccessory = isSearchMode
+	        leadingAccessoryTriggersSubmit = isSearchMode
+	        clearButtonVisibilityRule = isSearchMode ? "whileNotEmpty" : "never"
+	        sendButtonVisibilityRule = isSearchMode ? "never" : "whileNotEmpty"
+	        trailingActionsVisibilityRule = isSearchMode
+	          ? "whileEmptyBeforeInteractionOrFocused"
+	          : "whileEmpty"
+	        trailingAccessoryOrder = isSearchMode ? ["clear", "actions"] : ["send", "actions"]
+	      }
+	    }
 
     super.init()
 
@@ -175,18 +303,44 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     if #available(iOS 13.0, *) {
       container.overrideUserInterfaceStyle = isDark ? .dark : .light
     }
-    currentTint = tint
-    customBackgroundColor = bg
-    customFieldBackgroundColor = fieldBg
-    customSendButtonBackgroundColor = sendButtonBg
-    customPlaceholderColor = placeholderColor
-    controlEnabled = enabled
-    self.focusEnabled = focusEnabled
-    self.isSearchMode = isSearchMode
-    self.showsCancelButton = showsCancelButton
-    requestedMinHeight = max(36, min(minHeight, maxHeight))
-    requestedMaxHeight = max(requestedMinHeight, min(maxHeight, 240))
-    self.maxVisibleLines = max(1, maxVisibleLines)
+	    currentTint = tint
+	    customBackgroundColor = bg
+	    customFieldBackgroundColor = fieldBg
+	    customFieldOverlayColor = fieldOverlayColor
+	    customFieldBorderColor = fieldBorderColor
+	    customSendButtonBackgroundColor = sendButtonBg
+	    customSendButtonForegroundColor = sendButtonFg
+	    customPlaceholderColor = placeholderColor
+	    customLeadingAccessoryColor = leadingAccessoryColor
+	    customClearButtonColor = clearButtonColor
+	    customCancelButtonColor = cancelButtonColor
+	    controlEnabled = enabled
+	    self.focusEnabled = focusEnabled
+	    self.showsLeadingAccessory = showsLeadingAccessory
+	    self.leadingAccessoryTriggersSubmit = leadingAccessoryTriggersSubmit
+	    self.clearButtonVisibilityRule = clearButtonVisibilityRule
+	    self.sendButtonVisibilityRule = sendButtonVisibilityRule
+	    self.trailingActionsVisibilityRule = trailingActionsVisibilityRule
+	    self.trailingAccessoryOrder = trailingAccessoryOrder
+	    self.showsCancelButton = showsCancelButton
+	    self.cancelButtonText = cancelButtonText
+	    requestedMinHeight = max(36, min(minHeight, maxHeight))
+	    requestedMaxHeight = max(requestedMinHeight, maxHeight)
+	    self.maxVisibleLines = max(1, maxVisibleLines)
+	    self.leadingAccessoryIcon = leadingIcon
+	    self.clearButtonIcon = clearIcon
+	    self.sendButtonIcon = sendIcon
+	    self.disabledOpacity = max(0, min(disabledOpacity, 1))
+	    self.fieldCornerRadius = borderRadius
+	    self.accessoryButtonSize = accessoryButtonSize
+	    self.compactHorizontalPadding = fieldHorizontalPadding
+	    self.compactVerticalPadding = fieldVerticalPadding
+	    self.textOpticalVerticalOffset = textOpticalVerticalOffset
+	    self.sendButtonOuterInset = sendButtonOuterInset
+	    self.sendButtonDiameterBoost = sendButtonDiameterBoost
+	    self.trailingSpacing = trailingSpacing
+	    self.leadingReservedWidth = max(0, leadingReservedWidth)
+	    self.trailingReservedWidth = max(0, trailingReservedWidth)
 
     container.onLayout = { [weak self] in
       self?.refreshHeightAndNotifyIfNeeded()
@@ -221,21 +375,24 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     placeholderLabel.font = textView.font
     placeholderLabel.numberOfLines = 1
 
-    trailingStackView.translatesAutoresizingMaskIntoConstraints = false
-    trailingStackView.axis = .horizontal
-    trailingStackView.alignment = .center
-    trailingStackView.distribution = .fill
-    trailingStackView.spacing = 6
+	    trailingStackView.translatesAutoresizingMaskIntoConstraints = false
+	    trailingStackView.axis = .horizontal
+	    trailingStackView.alignment = .center
+	    trailingStackView.distribution = .fill
+	    trailingStackView.spacing = trailingSpacing
 
-    configureAccessoryButton(clearButton, size: accessoryButtonSize)
-    clearButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
-    clearButton.addTarget(self, action: #selector(onClearPressed), for: .touchUpInside)
+	    let clearButtonSizeConstraints = configureAccessoryButton(clearButton, size: accessoryButtonSize)
+	    clearButtonWidthConstraint = clearButtonSizeConstraints.width
+	    clearButtonHeightConstraint = clearButtonSizeConstraints.height
+	    clearButton.addTarget(self, action: #selector(onClearPressed), for: .touchUpInside)
 
-    for (index, button) in trailingButtons.enumerated() {
-      configureAccessoryButton(button, size: accessoryButtonSize)
-      button.tag = index
-      button.addTarget(self, action: #selector(onTrailingPressed(_:)), for: .touchUpInside)
-      button.isHidden = true
+	    for (index, button) in trailingButtons.enumerated() {
+	      let sizeConstraints = configureAccessoryButton(button, size: accessoryButtonSize)
+	      trailingButtonWidthConstraints.append(sizeConstraints.width)
+	      trailingButtonHeightConstraints.append(sizeConstraints.height)
+	      button.tag = index
+	      button.addTarget(self, action: #selector(onTrailingPressed(_:)), for: .touchUpInside)
+	      button.isHidden = true
     }
 
     let sendButtonSizeConstraints = configureAccessoryButton(
@@ -244,14 +401,14 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     )
     sendButtonWidthConstraint = sendButtonSizeConstraints.width
     sendButtonHeightConstraint = sendButtonSizeConstraints.height
-    sendButton.setImage(UIImage(systemName: "arrow.up"), for: .normal)
-    sendButton.addTarget(self, action: #selector(onSendPressed), for: .touchUpInside)
-    if #available(iOS 13.0, *) {
-      sendButton.setPreferredSymbolConfiguration(
-        UIImage.SymbolConfiguration(pointSize: sendButtonIconSize, weight: .medium),
-        forImageIn: .normal
-      )
-    }
+	    sendButton.setImage(UIImage(systemName: "arrow.up"), for: .normal)
+	    sendButton.addTarget(self, action: #selector(onSendPressed), for: .touchUpInside)
+	    if #available(iOS 13.0, *) {
+	      sendButton.setPreferredSymbolConfiguration(
+	        UIImage.SymbolConfiguration(pointSize: defaultSendButtonIconSize, weight: .medium),
+	        forImageIn: .normal
+	      )
+	    }
     if #available(iOS 15.0, *) {
       var config = sendButton.configuration ?? UIButton.Configuration.plain()
       config.contentInsets = NSDirectionalEdgeInsets(
@@ -270,14 +427,15 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       )
     }
 
-    configureAccessoryButton(searchButton, size: accessoryButtonSize)
-    searchButton.setImage(UIImage(systemName: "magnifyingglass"), for: .normal)
-    searchButton.addTarget(self, action: #selector(onSearchPressed), for: .touchUpInside)
+	    let searchButtonSizeConstraints = configureAccessoryButton(searchButton, size: accessoryButtonSize)
+	    leadingSearchWidthConstraint = searchButtonSizeConstraints.width
+	    searchButtonHeightConstraint = searchButtonSizeConstraints.height
+	    searchButton.addTarget(self, action: #selector(onSearchPressed), for: .touchUpInside)
 
-    cancelButton.translatesAutoresizingMaskIntoConstraints = false
-    cancelButton.setTitle("Cancel", for: .normal)
-    cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 17)
-    cancelButton.addTarget(self, action: #selector(onCancelPressed), for: .touchUpInside)
+	    cancelButton.translatesAutoresizingMaskIntoConstraints = false
+	    cancelButton.setTitle(cancelButtonText, for: .normal)
+	    cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 17)
+	    cancelButton.addTarget(self, action: #selector(onCancelPressed), for: .touchUpInside)
     cancelButton.setContentCompressionResistancePriority(.required, for: .horizontal)
     cancelButton.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -291,8 +449,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     fieldClipView.addSubview(placeholderLabel)
     fieldClipView.addSubview(trailingStackView)
 
-    leadingSearchWidthConstraint = searchButton.widthAnchor.constraint(equalToConstant: accessoryButtonSize)
-    let firstLineCenterOffset = currentFirstLineCenterOffset()
+	    let firstLineCenterOffset = currentFirstLineCenterOffset()
     searchButtonCenterYConstraint = searchButton.centerYAnchor.constraint(equalTo: fieldClipView.centerYAnchor)
     trailingStackFirstLineCenterYConstraint = trailingStackView.centerYAnchor.constraint(
       equalTo: textView.topAnchor,
@@ -337,10 +494,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       fieldTintOverlayView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
       fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
 
-      searchButton.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor, constant: compactHorizontalPadding - 4),
-      searchButtonCenterYConstraint,
-      searchButton.heightAnchor.constraint(equalToConstant: accessoryButtonSize),
-      leadingSearchWidthConstraint,
+	      searchButton.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor, constant: compactHorizontalPadding - 4),
+	      searchButtonCenterYConstraint,
+	      searchButtonHeightConstraint,
+	      leadingSearchWidthConstraint,
 
       trailingStackTrailingConstraint,
       trailingStackFirstLineCenterYConstraint,
@@ -357,15 +514,25 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       placeholderLabel.bottomAnchor.constraint(lessThanOrEqualTo: fieldClipView.bottomAnchor),
     ])
 
-    applyTrailingActions(trailingActions)
-    applyMode(isSearchMode)
-    applyShowsCancelButton(showsCancelButton)
-    applyFocusEnabled(focusEnabled)
-    applyEnabled(enabled)
-    applyPlaceholder(placeholder)
-    applyVisualStyle()
-    refreshAccessoryButtons()
-    refreshHeightAndNotifyIfNeeded(force: true)
+	    applyTrailingActions(trailingActions)
+	    applyAccessoryIcons()
+	    applyBehaviorConfiguration([
+	      "showsLeadingAccessory": self.showsLeadingAccessory,
+	      "leadingAccessoryTriggersSubmit": self.leadingAccessoryTriggersSubmit,
+	      "showsCancelButton": self.showsCancelButton,
+	      "clearButtonVisibility": self.clearButtonVisibilityRule,
+	      "sendButtonVisibility": self.sendButtonVisibilityRule,
+	      "trailingActionsVisibility": self.trailingActionsVisibilityRule,
+	      "trailingAccessoryOrder": self.trailingAccessoryOrder,
+	      "maxVisibleLines": self.maxVisibleLines
+	    ])
+	    applyFocusEnabled(focusEnabled)
+	    applyEnabled(enabled)
+	    applyPlaceholder(placeholder)
+	    applyStringsConfiguration(["cancelButtonText": cancelButtonText])
+	    applyVisualStyle()
+	    refreshAccessoryButtons()
+	    refreshHeightAndNotifyIfNeeded(force: true)
 
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
@@ -390,19 +557,29 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
           self.applyEnabled(value)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing enabled", details: nil)) }
-      case "setMode":
-        if let params = call.arguments as? [String: Any], let value = (params["isSearch"] as? NSNumber)?.boolValue {
-          self.applyMode(value)
-          result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing isSearch", details: nil)) }
-      case "setShowsCancelButton":
-        if let params = call.arguments as? [String: Any], let value = (params["showsCancelButton"] as? NSNumber)?.boolValue {
-          self.applyShowsCancelButton(value)
-          result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing showsCancelButton", details: nil)) }
-      case "setMinHeight":
-        if let params = call.arguments as? [String: Any],
-           let value = params["minHeight"] as? NSNumber {
+	      case "setMode":
+	        if let params = call.arguments as? [String: Any], let value = (params["isSearch"] as? NSNumber)?.boolValue {
+	          self.applyMode(value)
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing isSearch", details: nil)) }
+	      case "setBehavior":
+	        if let params = call.arguments as? [String: Any], let behavior = params["behavior"] as? [String: Any] {
+	          self.applyBehaviorConfiguration(behavior)
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing behavior", details: nil)) }
+	      case "setShowsCancelButton":
+	        if let params = call.arguments as? [String: Any], let value = (params["showsCancelButton"] as? NSNumber)?.boolValue {
+	          self.applyShowsCancelButton(value)
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing showsCancelButton", details: nil)) }
+	      case "setLayout":
+	        if let params = call.arguments as? [String: Any], let layout = params["layout"] as? [String: Any] {
+	          self.applyLayoutConfiguration(layout)
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing layout", details: nil)) }
+	      case "setMinHeight":
+	        if let params = call.arguments as? [String: Any],
+	           let value = params["minHeight"] as? NSNumber {
           let maxHeight = (params["maxHeight"] as? NSNumber).map { CGFloat(truncating: $0) }
           let maxVisibleLines = (params["maxVisibleLines"] as? NSNumber)?.intValue
           self.applyMinHeight(
@@ -418,35 +595,85 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
           self.applyFocusEnabled(value)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing focusEnabled", details: nil)) }
-      case "setTrailingActions":
-        if let params = call.arguments as? [String: Any] {
-          self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
-          result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing trailing actions args", details: nil)) }
-      case "setStyle":
-        if let params = call.arguments as? [String: Any] {
-          if let value = params["tint"] as? NSNumber {
-            self.currentTint = Self.colorFromARGB(value.intValue)
-          }
-          if let value = params["backgroundColor"] as? NSNumber {
-            self.customBackgroundColor = Self.colorFromARGB(value.intValue)
-          }
-          if let value = params["fieldBackgroundColor"] as? NSNumber {
-            self.customFieldBackgroundColor = Self.colorFromARGB(value.intValue)
-          }
-          if let value = params["sendButtonBackgroundColor"] as? NSNumber {
-            self.customSendButtonBackgroundColor = Self.colorFromARGB(value.intValue)
-          } else if params.keys.contains("sendButtonBackgroundColor") {
-            self.customSendButtonBackgroundColor = nil
-          }
-          if let value = params["placeholderColor"] as? NSNumber {
-            self.customPlaceholderColor = Self.colorFromARGB(value.intValue)
-          } else if params.keys.contains("placeholderColor") {
-            self.customPlaceholderColor = nil
-          }
-          self.applyVisualStyle()
-          result(nil)
-        } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
+	      case "setTrailingActions":
+	        if let params = call.arguments as? [String: Any] {
+	          self.applyTrailingActions(Self.parseTrailingActions(params["traillingActions"]))
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing trailing actions args", details: nil)) }
+	      case "setStrings":
+	        if let params = call.arguments as? [String: Any], let strings = params["strings"] as? [String: Any] {
+	          self.applyStringsConfiguration(strings)
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing strings", details: nil)) }
+	      case "setIcons":
+	        if let params = call.arguments as? [String: Any], let icons = params["icons"] as? [String: Any] {
+	          self.applyIconsConfiguration(icons)
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing icons", details: nil)) }
+	      case "setStyle":
+	        if let params = call.arguments as? [String: Any] {
+	          if let value = params["tint"] as? NSNumber {
+	            self.currentTint = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("tint") {
+	            self.currentTint = nil
+	          }
+	          if let value = params["backgroundColor"] as? NSNumber {
+	            self.customBackgroundColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("backgroundColor") {
+	            self.customBackgroundColor = nil
+	          }
+	          if let value = params["fieldBackgroundColor"] as? NSNumber {
+	            self.customFieldBackgroundColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("fieldBackgroundColor") {
+	            self.customFieldBackgroundColor = nil
+	          }
+	          if let value = params["fieldOverlayColor"] as? NSNumber {
+	            self.customFieldOverlayColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("fieldOverlayColor") {
+	            self.customFieldOverlayColor = nil
+	          }
+	          if let value = params["fieldBorderColor"] as? NSNumber {
+	            self.customFieldBorderColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("fieldBorderColor") {
+	            self.customFieldBorderColor = nil
+	          }
+	          if let value = params["sendButtonBackgroundColor"] as? NSNumber {
+	            self.customSendButtonBackgroundColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("sendButtonBackgroundColor") {
+	            self.customSendButtonBackgroundColor = nil
+	          }
+	          if let value = params["sendButtonForegroundColor"] as? NSNumber {
+	            self.customSendButtonForegroundColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("sendButtonForegroundColor") {
+	            self.customSendButtonForegroundColor = nil
+	          }
+	          if let value = params["placeholderColor"] as? NSNumber {
+	            self.customPlaceholderColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("placeholderColor") {
+	            self.customPlaceholderColor = nil
+	          }
+	          if let value = params["leadingAccessoryColor"] as? NSNumber {
+	            self.customLeadingAccessoryColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("leadingAccessoryColor") {
+	            self.customLeadingAccessoryColor = nil
+	          }
+	          if let value = params["clearButtonColor"] as? NSNumber {
+	            self.customClearButtonColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("clearButtonColor") {
+	            self.customClearButtonColor = nil
+	          }
+	          if let value = params["cancelButtonColor"] as? NSNumber {
+	            self.customCancelButtonColor = Self.colorFromARGB(value.intValue)
+	          } else if params.keys.contains("cancelButtonColor") {
+	            self.customCancelButtonColor = nil
+	          }
+	          if let value = params["disabledOpacity"] as? NSNumber {
+	            self.disabledOpacity = max(0, min(CGFloat(truncating: value), 1))
+	          }
+	          self.applyVisualStyle()
+	          self.refreshAccessoryButtons()
+	          result(nil)
+	        } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
       case "setVisible":
         if let params = call.arguments as? [String: Any], let visible = (params["visible"] as? NSNumber)?.boolValue {
           self.container.isHidden = !visible
@@ -490,7 +717,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       textView.resignFirstResponder()
       return
     }
-    hasInteractedWithSearchField = true
+    hasInteractedWithField = true
     refreshAccessoryButtons()
     channel.invokeMethod("tapped", arguments: nil)
     channel.invokeMethod("focusChanged", arguments: ["focused": true])
@@ -535,12 +762,12 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   }
 
   @objc private func onSearchPressed() {
-    guard controlEnabled && isSearchMode else { return }
+    guard controlEnabled && showsLeadingAccessory && leadingAccessoryTriggersSubmit else { return }
     channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
   }
 
   @objc private func onSendPressed() {
-    guard controlEnabled, !isSearchMode, let text = textView.text, !text.isEmpty else {
+    guard controlEnabled, let text = textView.text, !text.isEmpty else {
       return
     }
     channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
@@ -593,8 +820,8 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     textView.isEditable = editable
     textView.isSelectable = editable
     textView.isUserInteractionEnabled = enabled
-    fieldClipView.alpha = enabled ? 1.0 : 0.6
-    cancelButton.alpha = enabled ? 1.0 : 0.6
+    fieldClipView.alpha = enabled ? 1.0 : disabledOpacity
+    cancelButton.alpha = enabled ? 1.0 : disabledOpacity
     clearButton.isEnabled = enabled
     cancelButton.isEnabled = enabled
     applyVisualStyle()
@@ -611,16 +838,54 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     textView.isSelectable = editable
   }
 
-  private func applyMode(_ isSearch: Bool) {
-    let wasSearchMode = isSearchMode
-    isSearchMode = isSearch
-    if isSearch && !wasSearchMode {
-      hasInteractedWithSearchField = false
+  private func applyBehaviorConfiguration(_ params: [String: Any]) {
+    let previousTrailingRule = trailingActionsVisibilityRule
+    if let value = (params["showsLeadingAccessory"] as? NSNumber)?.boolValue {
+      showsLeadingAccessory = value
     }
-    leadingSearchWidthConstraint.constant = isSearch ? accessoryButtonSize : 0
+    if let value = (params["leadingAccessoryTriggersSubmit"] as? NSNumber)?.boolValue {
+      leadingAccessoryTriggersSubmit = value
+    }
+    if let value = (params["showsCancelButton"] as? NSNumber)?.boolValue {
+      showsCancelButton = value
+    }
+    if let value = params["clearButtonVisibility"] as? String {
+      clearButtonVisibilityRule = value
+    }
+    if let value = params["sendButtonVisibility"] as? String {
+      sendButtonVisibilityRule = value
+    }
+    if let value = params["trailingActionsVisibility"] as? String {
+      trailingActionsVisibilityRule = value
+    }
+    if let value = params["trailingAccessoryOrder"] as? [String], !value.isEmpty {
+      trailingAccessoryOrder = value
+    }
+    if let value = params["maxVisibleLines"] as? NSNumber {
+      maxVisibleLines = max(1, value.intValue)
+    }
+    if trailingActionsVisibilityRule == "whileEmptyBeforeInteractionOrFocused" &&
+        previousTrailingRule != trailingActionsVisibilityRule {
+      hasInteractedWithField = false
+    }
+    leadingSearchWidthConstraint.constant = currentLeadingAccessoryWidth()
+    applyShowsCancelButton(showsCancelButton)
     updateTrailingAccessoryAlignment()
     refreshAccessoryButtons()
+    refreshHeightAndNotifyIfNeeded(force: true)
     container.setNeedsLayout()
+  }
+
+  private func applyMode(_ isSearch: Bool) {
+    applyBehaviorConfiguration([
+      "showsLeadingAccessory": isSearch,
+      "leadingAccessoryTriggersSubmit": isSearch,
+      "clearButtonVisibility": isSearch ? "whileNotEmpty" : "never",
+      "sendButtonVisibility": isSearch ? "never" : "whileNotEmpty",
+      "trailingActionsVisibility": isSearch ? "whileEmptyBeforeInteractionOrFocused" : "whileEmpty",
+      "trailingAccessoryOrder": isSearch ? ["clear", "actions"] : ["send", "actions"],
+      "maxVisibleLines": isSearch ? 1 : maxVisibleLines
+    ])
   }
 
   private func applyShowsCancelButton(_ shows: Bool) {
@@ -628,7 +893,60 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     cancelButton.isHidden = !shows
     fieldTrailingConstraintToContainer.isActive = !shows
     fieldTrailingConstraintToCancel.isActive = shows
+    cancelButton.setTitle(cancelButtonText, for: .normal)
     container.setNeedsLayout()
+  }
+
+  private func applyLayoutConfiguration(_ params: [String: Any]) {
+    var minHeight = requestedMinHeight
+    var maxHeight = requestedMaxHeight
+    if let value = params["height"] as? NSNumber {
+      minHeight = CGFloat(truncating: value)
+    } else if let value = params["minHeight"] as? NSNumber {
+      minHeight = CGFloat(truncating: value)
+    }
+    if let value = params["maxHeight"] as? NSNumber {
+      maxHeight = CGFloat(truncating: value)
+    }
+    if let value = params["borderRadius"] as? NSNumber {
+      fieldCornerRadius = CGFloat(truncating: value)
+    }
+    if let value = params["accessoryButtonSize"] as? NSNumber {
+      accessoryButtonSize = CGFloat(truncating: value)
+    }
+    if let value = params["fieldHorizontalPadding"] as? NSNumber {
+      compactHorizontalPadding = CGFloat(truncating: value)
+    }
+    if let value = params["fieldVerticalPadding"] as? NSNumber {
+      compactVerticalPadding = CGFloat(truncating: value)
+    }
+    if let value = params["textOpticalVerticalOffset"] as? NSNumber {
+      textOpticalVerticalOffset = CGFloat(truncating: value)
+    }
+    if let value = params["sendButtonOuterInset"] as? NSNumber {
+      sendButtonOuterInset = CGFloat(truncating: value)
+    }
+    if let value = params["sendButtonSizeBoost"] as? NSNumber {
+      sendButtonDiameterBoost = CGFloat(truncating: value)
+    }
+    if let value = params["trailingSpacing"] as? NSNumber {
+      trailingSpacing = CGFloat(truncating: value)
+    }
+    if let value = params["leadingReservedWidth"] as? NSNumber {
+      leadingReservedWidth = max(0, CGFloat(truncating: value))
+    }
+    if let value = params["trailingReservedWidth"] as? NSNumber {
+      trailingReservedWidth = max(0, CGFloat(truncating: value))
+    }
+    requestedMaxHeight = max(maxHeight, minHeight)
+    requestedMinHeight = max(36, min(minHeight, requestedMaxHeight))
+    updateAccessoryButtonConstraints()
+    trailingStackView.spacing = trailingSpacing
+    applyTextInsets()
+    applyAccessoryIcons()
+    applyVisualStyle()
+    refreshAccessoryButtons()
+    refreshHeightAndNotifyIfNeeded(force: true)
   }
 
   private func applyMinHeight(
@@ -636,15 +954,36 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     maxHeight: CGFloat?,
     maxVisibleLines: Int?
   ) {
-    requestedMinHeight = max(36, min(minHeight, self.requestedMaxHeight))
-    if let maxHeight {
-      requestedMaxHeight = max(requestedMinHeight, min(maxHeight, 240))
-    }
+    var params: [String: Any] = ["minHeight": minHeight]
+    if let maxHeight { params["maxHeight"] = maxHeight }
+    applyLayoutConfiguration(params)
     if let maxVisibleLines {
       self.maxVisibleLines = max(1, maxVisibleLines)
     }
-    applyTextInsets()
     refreshHeightAndNotifyIfNeeded(force: true)
+  }
+
+  private func applyStringsConfiguration(_ params: [String: Any]) {
+    if let value = params["cancelButtonText"] as? String {
+      cancelButtonText = value
+    }
+    cancelButton.setTitle(cancelButtonText, for: .normal)
+    applyVisualStyle()
+  }
+
+  private func applyIconsConfiguration(_ params: [String: Any]) {
+    if params.keys.contains("leading") {
+      leadingAccessoryIcon = Self.parseAccessoryIcon(params["leading"])
+    }
+    if params.keys.contains("clear") {
+      clearButtonIcon = Self.parseAccessoryIcon(params["clear"])
+    }
+    if params.keys.contains("send") {
+      sendButtonIcon = Self.parseAccessoryIcon(params["send"])
+    }
+    applyAccessoryIcons()
+    applyVisualStyle()
+    refreshAccessoryButtons()
   }
 
   private func applyVisualStyle() {
@@ -655,16 +994,20 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     container.backgroundColor = customBackgroundColor ?? .clear
     fieldClipView.layer.cornerRadius = fieldCornerRadius
     fieldClipView.layer.cornerCurve = .continuous
+    fieldClipView.alpha = controlEnabled ? 1.0 : disabledOpacity
+    cancelButton.alpha = controlEnabled ? 1.0 : disabledOpacity
     fieldClipView.layer.borderWidth = 1
-    fieldClipView.layer.borderColor = UIColor.white.withAlphaComponent(
+    fieldClipView.layer.borderColor = (customFieldBorderColor ?? UIColor.white.withAlphaComponent(
       isDarkAppearance ? 0.16 : 0.34
-    ).cgColor
+    )).cgColor
 
     if #available(iOS 26.0, *) {
       updateGlassBackground()
       fieldBackgroundView.isHidden = true
       glassHostingController?.view.isHidden = false
-      if let customFieldBackgroundColor {
+      if let customFieldOverlayColor {
+        fieldTintOverlayView.backgroundColor = customFieldOverlayColor
+      } else if let customFieldBackgroundColor {
         fieldTintOverlayView.backgroundColor = customFieldBackgroundColor.withAlphaComponent(
           isDarkAppearance ? 0.18 : 0.22
         )
@@ -679,26 +1022,29 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       glassHostingController?.view.isHidden = true
       fieldBackgroundView.isHidden = false
       fieldBackgroundView.effect = currentBlurEffect()
-      fieldTintOverlayView.backgroundColor = .clear
+      fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
     }
 
     textView.textColor = .label
     textView.tintColor = currentTint ?? container.tintColor
     placeholderLabel.textColor = customPlaceholderColor ?? themedPlaceholderColor()
     placeholderLabel.font = textView.font
-    clearButton.tintColor = customPlaceholderColor ?? themedPlaceholderColor()
+    clearButton.tintColor =
+      clearButtonIcon?.iconDataColor ?? customClearButtonColor ?? customPlaceholderColor ?? themedPlaceholderColor()
     clearButton.backgroundColor = .clear
     clearButton.layer.cornerRadius = 0
-    cancelButton.tintColor = currentTint ?? container.tintColor
-    cancelButton.setTitleColor(currentTint ?? container.tintColor, for: .normal)
+    cancelButton.tintColor = customCancelButtonColor ?? currentTint ?? container.tintColor
+    cancelButton.setTitleColor(customCancelButtonColor ?? currentTint ?? container.tintColor, for: .normal)
     cancelButton.setTitleColor(
-      (currentTint ?? container.tintColor).withAlphaComponent(0.6),
+      (customCancelButtonColor ?? currentTint ?? container.tintColor).withAlphaComponent(disabledOpacity),
       for: .disabled
     )
-    searchButton.tintColor = customPlaceholderColor ?? themedPlaceholderColor()
+    searchButton.tintColor =
+      leadingAccessoryIcon?.iconDataColor ?? customLeadingAccessoryColor ?? customPlaceholderColor ?? themedPlaceholderColor()
     searchButton.backgroundColor = .clear
     searchButton.layer.cornerRadius = 0
-    sendButton.tintColor = .white
+    sendButton.tintColor =
+      sendButtonIcon?.iconDataColor ?? customSendButtonForegroundColor ?? .white
     sendButton.backgroundColor =
       customSendButtonBackgroundColor ?? currentTint ?? container.tintColor
     sendButton.layer.cornerRadius = sendButtonDiameter(for: requestedMinHeight) / 2
@@ -787,6 +1133,128 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     glassHostingController?.view.isHidden = false
   }
 
+  private func updateAccessoryButtonConstraints() {
+    clearButtonWidthConstraint?.constant = accessoryButtonSize
+    clearButtonHeightConstraint?.constant = accessoryButtonSize
+    leadingSearchWidthConstraint?.constant = currentLeadingAccessoryWidth()
+    searchButtonHeightConstraint?.constant = accessoryButtonSize
+    for constraint in trailingButtonWidthConstraints {
+      constraint.constant = accessoryButtonSize
+    }
+    for constraint in trailingButtonHeightConstraints {
+      constraint.constant = accessoryButtonSize
+    }
+  }
+
+  private func resolveVisibilityRule(
+    _ rule: String,
+    hasText: Bool,
+    hasFocus: Bool
+  ) -> Bool {
+    switch rule {
+    case "never":
+      return false
+    case "always":
+      return true
+    case "whileEmpty":
+      return !hasText
+    case "whileNotEmpty":
+      return hasText
+    case "whileFocused":
+      return hasFocus
+    case "whileUnfocused":
+      return !hasFocus
+    case "whileEmptyAndFocused":
+      return !hasText && hasFocus
+    case "whileEmptyBeforeInteractionOrFocused":
+      return !hasText && (!hasInteractedWithField || hasFocus)
+    default:
+      return false
+    }
+  }
+
+  private func resolvedTrailingAccessorySlot(
+    hasText: Bool,
+    hasFocus: Bool
+  ) -> String? {
+    for slot in trailingAccessoryOrder {
+      switch slot {
+      case "clear":
+        if resolveVisibilityRule(clearButtonVisibilityRule, hasText: hasText, hasFocus: hasFocus) {
+          return slot
+        }
+      case "actions":
+        if !currentTrailingActions.isEmpty &&
+            resolveVisibilityRule(trailingActionsVisibilityRule, hasText: hasText, hasFocus: hasFocus) {
+          return slot
+        }
+      case "send":
+        if resolveVisibilityRule(sendButtonVisibilityRule, hasText: hasText, hasFocus: hasFocus) {
+          return slot
+        }
+      default:
+        continue
+      }
+    }
+    return nil
+  }
+
+  private func applyAccessoryIcon(
+    to button: UIButton,
+    action: TrailingAction?,
+    defaultSystemName: String,
+    defaultPointSize: CGFloat,
+    defaultWeight: UIImage.SymbolWeight = .regular
+  ) {
+    if let action,
+       var image = Self.iconImage(
+        codePoint: action.iconDataCodePoint,
+        fontFamily: action.iconDataFontFamily,
+        fontPackage: action.iconDataFontPackage,
+        pointSize: actionIconPointSize(action),
+        fill: action.iconDataFill,
+        weight: action.iconDataWeight,
+        grade: action.iconDataGrade,
+        opticalSize: action.iconDataOpticalSize
+       ) {
+      if action.iconDataMatchTextDirection {
+        image = image.imageFlippedForRightToLeftLayoutDirection()
+      }
+      button.setImage(image, for: .normal)
+      return
+    }
+
+    button.setImage(UIImage(systemName: defaultSystemName), for: .normal)
+    if #available(iOS 13.0, *) {
+      button.setPreferredSymbolConfiguration(
+        UIImage.SymbolConfiguration(pointSize: defaultPointSize, weight: defaultWeight),
+        forImageIn: .normal
+      )
+    }
+  }
+
+  private func applyAccessoryIcons() {
+    applyAccessoryIcon(
+      to: clearButton,
+      action: clearButtonIcon,
+      defaultSystemName: "xmark.circle.fill",
+      defaultPointSize: 18
+    )
+    applyAccessoryIcon(
+      to: searchButton,
+      action: leadingAccessoryIcon,
+      defaultSystemName: "magnifyingglass",
+      defaultPointSize: 18
+    )
+    applyAccessoryIcon(
+      to: sendButton,
+      action: sendButtonIcon,
+      defaultSystemName: "arrow.up",
+      defaultPointSize: defaultSendButtonIconSize,
+      defaultWeight: .medium
+    )
+  }
+
   private func updatePlaceholderVisibility() {
     placeholderLabel.isHidden = !(textView.text ?? "").isEmpty
   }
@@ -796,18 +1264,27 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     currentFieldHeight: CGFloat? = nil
   ) {
     let resolvedHasText = hasText ?? !(textView.text ?? "").isEmpty
-    let showsSendButton = !isSearchMode && resolvedHasText
+    let showsSendButton = resolvedTrailingAccessorySlot(hasText: resolvedHasText, hasFocus: textView.isFirstResponder) == "send"
     let resolvedFieldHeight = max(
       requestedMinHeight,
       currentFieldHeight ?? (lastReportedHeight > 0 ? lastReportedHeight : requestedMinHeight)
     )
     let centersSendButton = showsSendButton && resolvedFieldHeight <= requestedMinHeight + 0.5
-    let alignsToFieldCenter = isSearchMode || !resolvedHasText || centersSendButton
+    let alignsToFieldCenter = showsLeadingAccessory || !resolvedHasText || centersSendButton
     trailingStackFirstLineCenterYConstraint.isActive = false
     trailingStackCenterYConstraint.isActive = alignsToFieldCenter
     trailingStackBottomConstraint.isActive = showsSendButton && !centersSendButton
-    trailingStackTrailingConstraint.constant = showsSendButton ? -sendButtonOuterInset : -(compactHorizontalPadding - 2)
+    trailingStackTrailingConstraint.constant = showsSendButton
+      ? -sendButtonOuterInset
+      : -(compactHorizontalPadding - 2 + trailingReservedWidth)
     trailingStackBottomConstraint.constant = -sendButtonOuterInset
+  }
+
+  private func currentLeadingAccessoryWidth() -> CGFloat {
+    if showsLeadingAccessory {
+      return max(accessoryButtonSize, leadingReservedWidth)
+    }
+    return leadingReservedWidth
   }
 
   private func sendButtonDiameter(for fieldHeight: CGFloat) -> CGFloat {
@@ -823,29 +1300,28 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   private func refreshAccessoryButtons() {
     let hasText = !(textView.text ?? "").isEmpty
-    let showsActionButtons = isSearchMode
-      ? (!hasText && (!hasInteractedWithSearchField || textView.isFirstResponder))
-      : !hasText
+    let hasFocus = textView.isFirstResponder
+    let activeSlot = resolvedTrailingAccessorySlot(hasText: hasText, hasFocus: hasFocus)
 
     updateTrailingAccessoryAlignment(hasText: hasText)
 
-    clearButton.isHidden = !isSearchMode || !hasText
-    clearButton.isEnabled = controlEnabled && isSearchMode && hasText
-    clearButton.alpha = clearButton.isEnabled ? 1.0 : 0.6
+    clearButton.isHidden = activeSlot != "clear"
+    clearButton.isEnabled = controlEnabled && activeSlot == "clear"
+    clearButton.alpha = clearButton.isEnabled ? 1.0 : disabledOpacity
 
-    searchButton.isHidden = !isSearchMode
-    searchButton.isEnabled = controlEnabled && isSearchMode
-    searchButton.alpha = searchButton.isEnabled ? 1.0 : 0.6
+    searchButton.isHidden = !showsLeadingAccessory
+    searchButton.isEnabled = controlEnabled && showsLeadingAccessory && leadingAccessoryTriggersSubmit
+    searchButton.alpha = controlEnabled && showsLeadingAccessory ? 1.0 : disabledOpacity
 
-    sendButton.isHidden = isSearchMode || !hasText
-    sendButton.isEnabled = controlEnabled && !isSearchMode && hasText
-    sendButton.alpha = sendButton.isEnabled ? 1.0 : 0.6
+    sendButton.isHidden = activeSlot != "send"
+    sendButton.isEnabled = controlEnabled && activeSlot == "send" && hasText
+    sendButton.alpha = sendButton.isEnabled ? 1.0 : disabledOpacity
 
     for (index, button) in trailingButtons.enumerated() {
-      let canShow = showsActionButtons && trailingButtonsEnabled[index]
+      let canShow = activeSlot == "actions" && trailingButtonsEnabled[index]
       button.isHidden = !canShow
       button.isEnabled = controlEnabled && canShow
-      button.alpha = button.isEnabled ? 1.0 : 0.6
+      button.alpha = button.isEnabled ? 1.0 : disabledOpacity
     }
 
     updatePlaceholderVisibility()
@@ -924,6 +1400,26 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       )
     }
     return actions
+  }
+
+  private static func parseAccessoryIcon(_ raw: Any?) -> TrailingAction? {
+    guard let dict = raw as? [String: Any],
+          let codePoint = (dict["iconDataCodePoint"] as? NSNumber)?.intValue else {
+      return nil
+    }
+    return TrailingAction(
+      iconDataCodePoint: codePoint,
+      iconDataFontFamily: dict["iconDataFontFamily"] as? String,
+      iconDataFontPackage: dict["iconDataFontPackage"] as? String,
+      iconDataMatchTextDirection:
+        (dict["iconDataMatchTextDirection"] as? NSNumber)?.boolValue ?? false,
+      iconDataColor: Self.parseOptionalColor(dict["iconDataColor"]),
+      iconDataSize: Self.parseOptionalCGFloat(dict["iconDataSize"]) ?? 16,
+      iconDataFill: Self.parseOptionalCGFloat(dict["iconDataFill"]),
+      iconDataWeight: Self.parseOptionalCGFloat(dict["iconDataWeight"]),
+      iconDataGrade: Self.parseOptionalCGFloat(dict["iconDataGrade"]),
+      iconDataOpticalSize: Self.parseOptionalCGFloat(dict["iconDataOpticalSize"])
+    )
   }
 
   private func applyTrailingActions(_ actions: [TrailingAction]) {

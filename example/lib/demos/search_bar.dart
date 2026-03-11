@@ -1,6 +1,5 @@
 import 'package:cupertino_native/cupertino_native.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 
 class SearchBarDemoPage extends StatefulWidget {
   const SearchBarDemoPage({super.key});
@@ -11,28 +10,192 @@ class SearchBarDemoPage extends StatefulWidget {
 
 class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
   final TextEditingController _queryController = TextEditingController();
+  final TextEditingController _coloredController = TextEditingController(
+    text: 'Cupertino',
+  );
   final TextEditingController _chatController = TextEditingController();
   final TextEditingController _bottomChatController = TextEditingController();
-  final TextEditingController _coloredController = TextEditingController(text: 'Cupertino');
 
   String _lastSubmitted = 'None';
   String _lastTrailingAction = 'None';
   String _lastTap = 'None';
   bool _enabled = true;
-  bool _showsCancelButton = true;
+  bool _showsCancelAction = true;
   bool _excludeFocus = false;
 
   @override
   void dispose() {
     _queryController.dispose();
+    _coloredController.dispose();
     _chatController.dispose();
     _bottomChatController.dispose();
-    _coloredController.dispose();
     super.dispose();
+  }
+
+  void _submitChat(TextEditingController controller) {
+    final value = controller.text.trim();
+    setState(() {
+      _lastSubmitted = value.isEmpty ? 'Empty' : value;
+      controller.clear();
+    });
+  }
+
+  Widget _iconAction({
+    required IconData icon,
+    required VoidCallback onPressed,
+    Color? color,
+    double size = 20,
+  }) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(28, 28),
+      onPressed: onPressed,
+      child: Icon(icon, size: size, color: color),
+    );
+  }
+
+  Widget _sendAction({
+    required BuildContext context,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    final tint = CupertinoTheme.of(context).primaryColor;
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(32, 32),
+      onPressed: enabled ? onPressed : null,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: enabled ? tint : tint.withValues(alpha: 0.28),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          CupertinoIcons.arrow_up,
+          size: 16,
+          color: CupertinoColors.white.withValues(alpha: enabled ? 1 : 0.72),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSearchTrailing(BuildContext context) {
+    final query = _queryController.text;
+    final placeholderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.placeholderText,
+      context,
+    );
+
+    if (query.isNotEmpty) {
+      return [
+        _iconAction(
+          icon: CupertinoIcons.clear_circled_solid,
+          color: placeholderColor,
+          onPressed: () {
+            setState(() {
+              _queryController.clear();
+              _lastTrailingAction = 'Cleared query';
+            });
+          },
+        ),
+        if (_showsCancelAction) ...[
+          const SizedBox(width: 6),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(28, 28),
+            onPressed: () {
+              setState(() {
+                _queryController.clear();
+                _lastSubmitted = 'Cancelled';
+              });
+            },
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: CupertinoTheme.of(context).primaryColor,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ];
+    }
+
+    return [
+      _iconAction(
+        icon: CupertinoIcons.qrcode_viewfinder,
+        color: placeholderColor,
+        onPressed: () {
+          setState(() => _lastTrailingAction = 'Scanner tapped');
+        },
+      ),
+      const SizedBox(width: 4),
+      _iconAction(
+        icon: CupertinoIcons.slider_horizontal_3,
+        color: placeholderColor,
+        onPressed: () {
+          setState(() => _lastTrailingAction = 'Filter tapped');
+        },
+      ),
+      if (_showsCancelAction) ...[
+        const SizedBox(width: 8),
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(28, 28),
+          onPressed: () {
+            setState(() => _lastSubmitted = 'Cancelled');
+          },
+          child: Text(
+            'Cancel',
+            style: TextStyle(
+              color: CupertinoTheme.of(context).primaryColor,
+              fontSize: 16,
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _buildComposerTrailing(
+    BuildContext context,
+    TextEditingController controller,
+  ) {
+    final hasText = controller.text.trim().isNotEmpty;
+    return [
+      _iconAction(
+        icon: CupertinoIcons.photo,
+        color: CupertinoTheme.of(context).primaryColor,
+        onPressed: () {
+          setState(() => _lastTrailingAction = 'Photo tapped');
+        },
+      ),
+      const SizedBox(width: 6),
+      _iconAction(
+        icon: CupertinoIcons.mic,
+        color: CupertinoTheme.of(context).primaryColor,
+        onPressed: () {
+          setState(() => _lastTrailingAction = 'Mic tapped');
+        },
+      ),
+      const SizedBox(width: 8),
+      _sendAction(
+        context: context,
+        enabled: hasText,
+        onPressed: () => _submitChat(controller),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
+    final placeholderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.placeholderText,
+      context,
+    );
+
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(middle: Text('Text Field')),
       child: SafeArea(
@@ -45,38 +208,29 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                 const SizedBox(height: 8),
                 ExcludeFocus(
                   excluding: _excludeFocus,
-                  child: CNTextField.search(
+                  child: CNTextField(
                     controller: _queryController,
                     placeholder: 'Search',
                     enabled: _enabled,
-                    showsCancelButton: _showsCancelButton,
-                    actions: [
-                      CNTextFieldAction(
-                        icon: const Icon(Icons.qr_code_scanner, color: CupertinoColors.black, size: 24),
-                        onPressed: () {
-                          setState(() => _lastTrailingAction = 'Scanner tapped');
-                        },
-                      ),
-                      CNTextFieldAction(
-                        icon: const Icon(Icons.abc, size: 24, color: CupertinoColors.black),
-                        onPressed: () {
-                          setState(() => _lastTrailingAction = 'Filter tapped');
-                        },
-                      ),
-                    ],
+                    leading: Icon(
+                      CupertinoIcons.search,
+                      color: placeholderColor,
+                      size: 20,
+                    ),
+                    trailing: _buildSearchTrailing(context),
                     onChanged: (_) => setState(() {}),
                     onTap: () => setState(() => _lastTap = 'Tapped'),
-                    onSubmitted: (value) => setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value),
-                    onCancelled: () {
+                    onSubmitted: (value) {
                       setState(() {
-                        _queryController.clear();
-                        _lastSubmitted = 'Cancelled';
+                        _lastSubmitted = value.isEmpty ? 'Empty' : value;
                       });
                     },
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('Current text: ${_queryController.text.isEmpty ? 'Empty' : _queryController.text}'),
+                Text(
+                  'Current text: ${_queryController.text.isEmpty ? 'Empty' : _queryController.text}',
+                ),
                 Text('Last submitted: $_lastSubmitted'),
                 Text('Trailing action: $_lastTrailingAction'),
                 Text('Last tap: $_lastTap'),
@@ -85,21 +239,34 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                   children: [
                     const Text('Enabled'),
                     const Spacer(),
-                    CupertinoSwitch(value: _enabled, onChanged: (value) => setState(() => _enabled = value)),
+                    CupertinoSwitch(
+                      value: _enabled,
+                      onChanged: (value) => setState(() => _enabled = value),
+                    ),
                   ],
                 ),
                 Row(
                   children: [
-                    const Text('Show cancel button'),
+                    const Text('Show cancel action'),
                     const Spacer(),
-                    CupertinoSwitch(value: _showsCancelButton, onChanged: (value) => setState(() => _showsCancelButton = value)),
+                    CupertinoSwitch(
+                      value: _showsCancelAction,
+                      onChanged: (value) {
+                        setState(() => _showsCancelAction = value);
+                      },
+                    ),
                   ],
                 ),
                 Row(
                   children: [
                     const Text('Exclude focus'),
                     const Spacer(),
-                    CupertinoSwitch(value: _excludeFocus, onChanged: (value) => setState(() => _excludeFocus = value)),
+                    CupertinoSwitch(
+                      value: _excludeFocus,
+                      onChanged: (value) {
+                        setState(() => _excludeFocus = value);
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -112,9 +279,19 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                       context: context,
                       builder: (context) => CupertinoActionSheet(
                         title: const Text('Text Field Overlay'),
-                        message: const Text('The text field stays clean underneath this sheet and keeps Flutter focus behavior.'),
-                        actions: [CupertinoActionSheetAction(onPressed: () => Navigator.of(context).pop(), child: const Text('Dismiss'))],
-                        cancelButton: CupertinoActionSheetAction(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+                        message: const Text(
+                          'The text field keeps the native surface while accessories are built in Flutter.',
+                        ),
+                        actions: [
+                          CupertinoActionSheetAction(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Dismiss'),
+                          ),
+                        ],
+                        cancelButton: CupertinoActionSheetAction(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Close'),
+                        ),
                       ),
                     );
                   },
@@ -122,35 +299,50 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                 const SizedBox(height: 24),
                 const Text('Tinted Search'),
                 const SizedBox(height: 8),
-                CNTextField.search(controller: _coloredController, placeholder: 'Search components', onChanged: (_) => setState(() {}), onSubmitted: (value) => setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value)),
-                const SizedBox(height: 24),
-                const Text('Chat'),
-                const SizedBox(height: 8),
-                CNTextField.chat(
-                  controller: _chatController,
-                  placeholder: 'Type a message',
-                  enabled: _enabled,
-                  tint: CupertinoColors.systemBlue,
-                  sendButtonBackgroundColor: CupertinoColors.systemBlue,
-                  actions: [
-                    CNTextFieldAction(
-                      icon: const Icon(CupertinoIcons.photo, color: CupertinoColors.systemBlue, size: 20),
+                CNTextField(
+                  controller: _coloredController,
+                  placeholder: 'Search components',
+                  style: const CNTextFieldStyle(
+                    tint: CupertinoColors.systemBlue,
+                  ),
+                  leading: const Icon(
+                    CupertinoIcons.search,
+                    color: CupertinoColors.systemGrey,
+                    size: 20,
+                  ),
+                  trailing: [
+                    _iconAction(
+                      icon: CupertinoIcons.clear_circled_solid,
+                      color: CupertinoColors.systemGrey,
                       onPressed: () {
-                        setState(() => _lastTrailingAction = 'Photo tapped');
-                      },
-                    ),
-                    CNTextFieldAction(
-                      icon: const Icon(CupertinoIcons.mic, color: CupertinoColors.systemBlue, size: 20),
-                      onPressed: () {
-                        setState(() => _lastTrailingAction = 'Mic tapped');
+                        setState(() {
+                          _coloredController.clear();
+                          _lastTrailingAction = 'Cleared tinted search';
+                        });
                       },
                     ),
                   ],
                   onChanged: (_) => setState(() {}),
                   onSubmitted: (value) {
-                    setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value);
-                    _chatController.clear();
+                    setState(() {
+                      _lastSubmitted = value.isEmpty ? 'Empty' : value;
+                    });
                   },
+                ),
+                const SizedBox(height: 24),
+                const Text('Composer'),
+                const SizedBox(height: 8),
+                CNTextField(
+                  controller: _chatController,
+                  placeholder: 'Type a message',
+                  enabled: _enabled,
+                  layout: const CNTextFieldLayout(maxVisibleLines: 4),
+                  style: const CNTextFieldStyle(
+                    tint: CupertinoColors.systemBlue,
+                  ),
+                  trailing: _buildComposerTrailing(context, _chatController),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _submitChat(_chatController),
                 ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -175,6 +367,7 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                       onPressed: () {
                         setState(() {
                           _queryController.clear();
+                          _coloredController.clear();
                           _chatController.clear();
                           _bottomChatController.clear();
                           _lastSubmitted = 'None';
@@ -189,32 +382,21 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
               alignment: Alignment.bottomCenter,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: CNTextField.chat(
+                child: CNTextField(
                   controller: _bottomChatController,
                   placeholder: 'What should I eat next?',
                   enabled: _enabled,
-                  tint: CupertinoColors.systemBlue,
-                  sendButtonBackgroundColor: CupertinoColors.systemBlue,
-                  actions: [
-                    CNTextFieldAction(
-                      icon: const Icon(Icons.camera, color: CupertinoColors.black, size: 20),
-                      onPressed: () {
-                        setState(() => _lastTrailingAction = 'Photo tapped');
-                      },
-                    ),
-                    // CNTextFieldAction(
-                    //   icon: const Icon(CupertinoIcons.sparkles, color: CupertinoColors.systemBlue, size: 20),
-                    //   onPressed: () {
-                    //     setState(() => _lastTrailingAction = 'Magic tapped');
-                    //   },
-                    // ),
-                  ],
+                  layout: const CNTextFieldLayout(maxVisibleLines: 4),
+                  style: const CNTextFieldStyle(
+                    tint: CupertinoColors.systemBlue,
+                  ),
+                  trailing: _buildComposerTrailing(
+                    context,
+                    _bottomChatController,
+                  ),
                   onChanged: (_) => setState(() {}),
                   onTap: () => setState(() => _lastTap = 'Tapped'),
-                  onSubmitted: (value) {
-                    setState(() => _lastSubmitted = value.isEmpty ? 'Empty' : value);
-                    _bottomChatController.clear();
-                  },
+                  onSubmitted: (_) => _submitChat(_bottomChatController),
                 ),
               ),
             ),
