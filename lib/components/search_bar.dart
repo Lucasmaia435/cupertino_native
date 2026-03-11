@@ -173,6 +173,8 @@ class _CNTextFieldState extends State<CNTextField> {
   bool _hasScheduledNativeHeightCommit = false;
   double _leadingWidth = 0;
   double _trailingWidth = 0;
+  double _trailingHeight = 0;
+  double? _reportedFallbackFieldHeight;
 
   String? _lastText;
   String? _lastPlaceholder;
@@ -228,10 +230,39 @@ class _CNTextFieldState extends State<CNTextField> {
   double get _trailingReservedWidth =>
       _hasTrailingAccessories ? _trailingWidth + _layout.accessoryGap : 0.0;
 
-  double get _trailingBottomInset => math.max(
-    0.0,
-    _layout.fieldVerticalPadding - _layout.textOpticalVerticalOffset,
-  );
+  double _resolvedLineHeight(BuildContext context) {
+    final themeTextStyle = CupertinoTheme.of(context).textTheme.textStyle;
+    final defaultFontSize = defaultTargetPlatform == TargetPlatform.macOS
+        ? 16.0
+        : 17.0;
+    final fontSize = themeTextStyle.fontSize ?? defaultFontSize;
+    return fontSize * (themeTextStyle.height ?? 1.25);
+  }
+
+  double _resolvedTextVerticalPadding(BuildContext context) {
+    final lineHeight = _resolvedLineHeight(context);
+    return math.max(
+      _layout.fieldVerticalPadding,
+      (_minimumHeight - lineHeight) / 2,
+    );
+  }
+
+  double _resolvedTextBottomPadding(BuildContext context) {
+    final effectiveTextVerticalPadding = _resolvedTextVerticalPadding(context);
+    return math.max(
+      0.0,
+      effectiveTextVerticalPadding - _layout.textOpticalVerticalOffset,
+    );
+  }
+
+  double _trailingLastLineTop(BuildContext context, double fieldHeight) {
+    final bottomPadding = _resolvedTextBottomPadding(context);
+    final lastLineBottom = fieldHeight - bottomPadding;
+    final trailingHeight = _trailingHeight > 0
+        ? _trailingHeight
+        : _resolvedLineHeight(context);
+    return math.max(0.0, lastLineBottom - trailingHeight);
+  }
 
   @override
   void initState() {
@@ -645,13 +676,27 @@ class _CNTextFieldState extends State<CNTextField> {
     _syncPropsToNativeIfNeeded();
   }
 
-  void _updateTrailingWidth(Size size) {
+  void _updateTrailingSize(Size size) {
     final width = size.width;
-    if ((_trailingWidth - width).abs() < 0.5) return;
+    final height = size.height;
+    if ((_trailingWidth - width).abs() < 0.5 &&
+        (_trailingHeight - height).abs() < 0.5) {
+      return;
+    }
     setState(() {
       _trailingWidth = width;
+      _trailingHeight = height;
     });
     _syncPropsToNativeIfNeeded();
+  }
+
+  void _updateFallbackFieldSize(Size size) {
+    final height = size.height;
+    final currentHeight = _reportedFallbackFieldHeight ?? 0;
+    if ((currentHeight - height).abs() < 0.5) return;
+    setState(() {
+      _reportedFallbackFieldHeight = height;
+    });
   }
 
   @override
@@ -718,36 +763,45 @@ class _CNTextFieldState extends State<CNTextField> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(_layout.borderRadius),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          child,
-          if (leading != null)
-            PositionedDirectional(
-              start: leadingInset,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: _SizeObserver(
-                  onSize: _updateLeadingWidth,
-                  child: leading,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final fieldHeight = constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : _effectiveNativeHeight;
+          final trailingTop = _trailingLastLineTop(context, fieldHeight);
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              child,
+              if (leading != null)
+                PositionedDirectional(
+                  start: leadingInset,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: _SizeObserver(
+                      onSize: _updateLeadingWidth,
+                      child: leading,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          if (trailing.isNotEmpty)
-            PositionedDirectional(
-              end: trailingInset,
-              bottom: _trailingBottomInset,
-              child: _SizeObserver(
-                onSize: _updateTrailingWidth,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: trailing,
+              if (trailing.isNotEmpty)
+                PositionedDirectional(
+                  end: trailingInset,
+                  top: trailingTop,
+                  child: _SizeObserver(
+                    onSize: _updateTrailingSize,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: trailing,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -791,18 +845,11 @@ class _CNTextFieldState extends State<CNTextField> {
       height: textStyle.height,
       forceStrutHeight: true,
     );
-    final lineHeight = (textStyle.fontSize ?? 17) * (textStyle.height ?? 1.0);
-    final minimumResolvedHeight = math.max(36.0, _layout.height);
-    final effectiveTextVerticalPadding = math.max(
-      _layout.fieldVerticalPadding,
-      (minimumResolvedHeight - lineHeight) / 2,
-    );
+    final lineHeight = _resolvedLineHeight(context);
+    final effectiveTextVerticalPadding = _resolvedTextVerticalPadding(context);
     final effectiveTextTopPadding =
         effectiveTextVerticalPadding + _layout.textOpticalVerticalOffset;
-    final effectiveTextBottomPadding = math.max(
-      0.0,
-      effectiveTextVerticalPadding - _layout.textOpticalVerticalOffset,
-    );
+    final effectiveTextBottomPadding = _resolvedTextBottomPadding(context);
     final minFieldHeight = math
         .max(
           36.0,
@@ -834,106 +881,126 @@ class _CNTextFieldState extends State<CNTextField> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(_layout.borderRadius),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: resolvedFieldBackground,
-                  borderRadius: BorderRadius.circular(_layout.borderRadius),
-                  border: resolvedFieldBorderColor == null
-                      ? null
-                      : Border.all(color: resolvedFieldBorderColor),
-                ),
-              ),
-              if (resolvedFieldOverlayColor != null)
-                IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: resolvedFieldOverlayColor,
-                      borderRadius: BorderRadius.circular(_layout.borderRadius),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final fieldHeight =
+                  (_reportedFallbackFieldHeight ?? minFieldHeight)
+                      .clamp(minFieldHeight, maxFieldHeight)
+                      .toDouble();
+              final trailingTop = _trailingLastLineTop(context, fieldHeight);
+
+              return _SizeObserver(
+                onSize: _updateFallbackFieldSize,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: resolvedFieldBackground,
+                        borderRadius: BorderRadius.circular(
+                          _layout.borderRadius,
+                        ),
+                        border: resolvedFieldBorderColor == null
+                            ? null
+                            : Border.all(color: resolvedFieldBorderColor),
+                      ),
                     ),
-                  ),
-                ),
-              CupertinoTheme(
-                data: theme.copyWith(primaryColor: effectiveTint),
-                child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
-                  child: CupertinoTextField.borderless(
-                    controller: _textController,
-                    focusNode: _focusNode,
-                    autofocus: widget.autofocus,
-                    enabled: widget.enabled,
-                    enableInteractiveSelection: canInteractWithTextInput,
-                    padding: EdgeInsetsDirectional.only(
-                      start:
-                          _layout.fieldHorizontalPadding +
-                          _leadingReservedWidth,
-                      end:
-                          _layout.fieldHorizontalPadding +
-                          _trailingReservedWidth,
-                      top: effectiveTextTopPadding,
-                      bottom: effectiveTextBottomPadding,
+                    if (resolvedFieldOverlayColor != null)
+                      IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: resolvedFieldOverlayColor,
+                            borderRadius: BorderRadius.circular(
+                              _layout.borderRadius,
+                            ),
+                          ),
+                        ),
+                      ),
+                    CupertinoTheme(
+                      data: theme.copyWith(primaryColor: effectiveTint),
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(
+                          context,
+                        ).copyWith(scrollbars: false),
+                        child: CupertinoTextField.borderless(
+                          controller: _textController,
+                          focusNode: _focusNode,
+                          autofocus: widget.autofocus,
+                          enabled: widget.enabled,
+                          enableInteractiveSelection: canInteractWithTextInput,
+                          padding: EdgeInsetsDirectional.only(
+                            start:
+                                _layout.fieldHorizontalPadding +
+                                _leadingReservedWidth,
+                            end:
+                                _layout.fieldHorizontalPadding +
+                                _trailingReservedWidth,
+                            top: effectiveTextTopPadding,
+                            bottom: effectiveTextBottomPadding,
+                          ),
+                          minLines: 1,
+                          maxLines: _effectiveMaxVisibleLines == 1 ? 1 : null,
+                          keyboardType: widget.keyboardType,
+                          textInputAction: widget.textInputAction,
+                          style: textStyle,
+                          strutStyle: strutStyle,
+                          placeholder: widget.placeholder,
+                          placeholderStyle: textStyle.copyWith(
+                            color: resolvedPlaceholderColor,
+                          ),
+                          cursorColor: effectiveTint,
+                          onTap: widget.onTap,
+                          onChanged: widget.onChanged,
+                          onSubmitted: widget.onSubmitted,
+                          contextMenuBuilder: (context, editableTextState) {
+                            if (!canInteractWithTextInput) {
+                              return const SizedBox.shrink();
+                            }
+                            if (defaultTargetPlatform == TargetPlatform.iOS &&
+                                SystemContextMenu.isSupported(context)) {
+                              return SystemContextMenu.editableText(
+                                editableTextState: editableTextState,
+                              );
+                            }
+                            return CupertinoAdaptiveTextSelectionToolbar.editableText(
+                              editableTextState: editableTextState,
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                    minLines: 1,
-                    maxLines: _effectiveMaxVisibleLines == 1 ? 1 : null,
-                    keyboardType: widget.keyboardType,
-                    textInputAction: widget.textInputAction,
-                    style: textStyle,
-                    strutStyle: strutStyle,
-                    placeholder: widget.placeholder,
-                    placeholderStyle: textStyle.copyWith(
-                      color: resolvedPlaceholderColor,
-                    ),
-                    cursorColor: effectiveTint,
-                    onTap: widget.onTap,
-                    onChanged: widget.onChanged,
-                    onSubmitted: widget.onSubmitted,
-                    contextMenuBuilder: (context, editableTextState) {
-                      if (!canInteractWithTextInput) {
-                        return const SizedBox.shrink();
-                      }
-                      if (defaultTargetPlatform == TargetPlatform.iOS &&
-                          SystemContextMenu.isSupported(context)) {
-                        return SystemContextMenu.editableText(
-                          editableTextState: editableTextState,
-                        );
-                      }
-                      return CupertinoAdaptiveTextSelectionToolbar.editableText(
-                        editableTextState: editableTextState,
-                      );
-                    },
-                  ),
+                    if (_hasLeadingAccessory)
+                      PositionedDirectional(
+                        start: math.max(
+                          0.0,
+                          _layout.fieldHorizontalPadding - 4,
+                        ),
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _SizeObserver(
+                            onSize: _updateLeadingWidth,
+                            child: widget.leading!,
+                          ),
+                        ),
+                      ),
+                    if (_hasTrailingAccessories)
+                      PositionedDirectional(
+                        end: math.max(0.0, _layout.fieldHorizontalPadding - 2),
+                        top: trailingTop,
+                        child: _SizeObserver(
+                          onSize: _updateTrailingSize,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: widget.trailing,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              if (_hasLeadingAccessory)
-                PositionedDirectional(
-                  start: math.max(0.0, _layout.fieldHorizontalPadding - 4),
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: _SizeObserver(
-                      onSize: _updateLeadingWidth,
-                      child: widget.leading!,
-                    ),
-                  ),
-                ),
-              if (_hasTrailingAccessories)
-                PositionedDirectional(
-                  end: math.max(0.0, _layout.fieldHorizontalPadding - 2),
-                  bottom: _trailingBottomInset,
-                  child: _SizeObserver(
-                    onSize: _updateTrailingWidth,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: widget.trailing,
-                    ),
-                  ),
-                ),
-            ],
+              );
+            },
           ),
         ),
       ),
