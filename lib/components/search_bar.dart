@@ -256,12 +256,13 @@ class _CNTextFieldState extends State<CNTextField> {
   }
 
   double _trailingLastLineTop(BuildContext context, double fieldHeight) {
+    const trailingOpticalLift = 2.0;
     final bottomPadding = _resolvedTextBottomPadding(context);
     final lastLineBottom = fieldHeight - bottomPadding;
     final trailingHeight = _trailingHeight > 0
         ? _trailingHeight
         : _resolvedLineHeight(context);
-    return math.max(0.0, lastLineBottom - trailingHeight);
+    return math.max(0.0, lastLineBottom - trailingHeight - trailingOpticalLift);
   }
 
   @override
