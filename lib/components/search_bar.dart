@@ -64,10 +64,17 @@ class CNTextFieldStyle {
   /// Accent/tint color.
   final Color? tint;
 
-  /// Optional outer container background color.
+  /// Primary background color for the control.
+  ///
+  /// When [fieldBackgroundColor] is omitted, this color is also used as the
+  /// field surface so the component tracks other native controls like
+  /// [CNTabBar].
   final Color? backgroundColor;
 
-  /// Optional background color for the field surface.
+  /// Optional explicit background color for the field surface.
+  ///
+  /// When provided, this overrides [backgroundColor] for the inner field
+  /// chrome.
   final Color? fieldBackgroundColor;
 
   /// Optional overlay color applied on top of the field surface.
@@ -172,6 +179,7 @@ class _CNTextFieldState extends State<CNTextField> {
   double? _pendingNativeHeight;
   bool _hasScheduledNativeHeightCommit = false;
   double _leadingWidth = 0;
+  double _leadingHeight = 0;
   double _trailingWidth = 0;
   double _trailingHeight = 0;
   double? _reportedFallbackFieldHeight;
@@ -205,6 +213,9 @@ class _CNTextFieldState extends State<CNTextField> {
 
   Color get _effectiveTint =>
       _style.tint ?? CupertinoTheme.of(context).primaryColor;
+
+  Color? get _effectiveFieldBackgroundColor =>
+      _style.fieldBackgroundColor ?? _style.backgroundColor;
 
   double get _configuredMaxHeight =>
       math.max(_layout.height, _layout.maxHeight);
@@ -255,14 +266,37 @@ class _CNTextFieldState extends State<CNTextField> {
     );
   }
 
-  double _trailingLastLineTop(BuildContext context, double fieldHeight) {
-    const trailingOpticalLift = 2.0;
+  double _accessoryLastLineTop(
+    BuildContext context,
+    double fieldHeight, {
+    required double accessoryHeight,
+  }) {
+    const accessoryOpticalLift = 2.0;
     final bottomPadding = _resolvedTextBottomPadding(context);
     final lastLineBottom = fieldHeight - bottomPadding;
-    final trailingHeight = _trailingHeight > 0
-        ? _trailingHeight
+    final resolvedAccessoryHeight = accessoryHeight > 0
+        ? accessoryHeight
         : _resolvedLineHeight(context);
-    return math.max(0.0, lastLineBottom - trailingHeight - trailingOpticalLift);
+    return math.max(
+      0.0,
+      lastLineBottom - resolvedAccessoryHeight - accessoryOpticalLift,
+    );
+  }
+
+  double _leadingLastLineTop(BuildContext context, double fieldHeight) {
+    return _accessoryLastLineTop(
+      context,
+      fieldHeight,
+      accessoryHeight: _leadingHeight,
+    );
+  }
+
+  double _trailingLastLineTop(BuildContext context, double fieldHeight) {
+    return _accessoryLastLineTop(
+      context,
+      fieldHeight,
+      accessoryHeight: _trailingHeight,
+    );
   }
 
   @override
@@ -516,8 +550,7 @@ class _CNTextFieldState extends State<CNTextField> {
   }
 
   Map<String, dynamic> _encodeStyle() {
-    return <String, dynamic>{
-      'tint': resolveColorToArgb(_effectiveTint, context),
+    return encodeStyle(context, tint: _effectiveTint)..addAll(<String, dynamic>{
       'backgroundColor': resolveColorToArgb(_style.backgroundColor, context),
       'fieldBackgroundColor': resolveColorToArgb(
         _style.fieldBackgroundColor,
@@ -530,7 +563,7 @@ class _CNTextFieldState extends State<CNTextField> {
       'fieldBorderColor': resolveColorToArgb(_style.fieldBorderColor, context),
       'placeholderColor': resolveColorToArgb(_style.placeholderColor, context),
       'disabledOpacity': _style.disabledOpacity,
-    };
+    });
   }
 
   void _cacheCurrentProps() {
@@ -668,13 +701,19 @@ class _CNTextFieldState extends State<CNTextField> {
     return null;
   }
 
-  void _updateLeadingWidth(Size size) {
+  void _updateLeadingSize(Size size) {
     final width = size.width;
-    if ((_leadingWidth - width).abs() < 0.5) return;
+    final height = size.height;
+    final widthChanged = (_leadingWidth - width).abs() >= 0.5;
+    final heightChanged = (_leadingHeight - height).abs() >= 0.5;
+    if (!widthChanged && !heightChanged) return;
     setState(() {
       _leadingWidth = width;
+      _leadingHeight = height;
     });
-    _syncPropsToNativeIfNeeded();
+    if (widthChanged) {
+      _syncPropsToNativeIfNeeded();
+    }
   }
 
   void _updateTrailingSize(Size size) {
@@ -769,6 +808,7 @@ class _CNTextFieldState extends State<CNTextField> {
           final fieldHeight = constraints.maxHeight.isFinite
               ? constraints.maxHeight
               : _effectiveNativeHeight;
+          final leadingTop = _leadingLastLineTop(context, fieldHeight);
           final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
           return Stack(
@@ -778,13 +818,10 @@ class _CNTextFieldState extends State<CNTextField> {
               if (leading != null)
                 PositionedDirectional(
                   start: leadingInset,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: _SizeObserver(
-                      onSize: _updateLeadingWidth,
-                      child: leading,
-                    ),
+                  top: leadingTop,
+                  child: _SizeObserver(
+                    onSize: _updateLeadingSize,
+                    child: leading,
                   ),
                 ),
               if (trailing.isNotEmpty)
@@ -823,7 +860,7 @@ class _CNTextFieldState extends State<CNTextField> {
 
     final resolvedFieldBackground =
         _resolveDynamicColor(
-          _style.fieldBackgroundColor ??
+          _effectiveFieldBackgroundColor ??
               _style.fieldOverlayColor ??
               CupertinoColors.systemGrey5,
         ) ??
@@ -888,6 +925,7 @@ class _CNTextFieldState extends State<CNTextField> {
                   (_reportedFallbackFieldHeight ?? minFieldHeight)
                       .clamp(minFieldHeight, maxFieldHeight)
                       .toDouble();
+              final leadingTop = _leadingLastLineTop(context, fieldHeight);
               final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
               return _SizeObserver(
@@ -976,13 +1014,10 @@ class _CNTextFieldState extends State<CNTextField> {
                           0.0,
                           _layout.fieldHorizontalPadding - 4,
                         ),
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: _SizeObserver(
-                            onSize: _updateLeadingWidth,
-                            child: widget.leading!,
-                          ),
+                        top: leadingTop,
+                        child: _SizeObserver(
+                          onSize: _updateLeadingSize,
+                          child: widget.leading!,
                         ),
                       ),
                     if (_hasTrailingAccessories)
@@ -1006,19 +1041,6 @@ class _CNTextFieldState extends State<CNTextField> {
         ),
       ),
     );
-
-    if (_style.backgroundColor != null) {
-      content = DecoratedBox(
-        decoration: BoxDecoration(
-          color: CupertinoDynamicColor.resolve(
-            _style.backgroundColor!,
-            context,
-          ),
-          borderRadius: BorderRadius.circular(_layout.borderRadius),
-        ),
-        child: Padding(padding: const EdgeInsets.all(4), child: content),
-      );
-    }
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 180),

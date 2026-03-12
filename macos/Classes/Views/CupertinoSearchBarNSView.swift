@@ -6,7 +6,6 @@ import SwiftUI
 @available(macOS 26.0, *)
 private struct MacGlassInputBackground: View {
   let cornerRadius: CGFloat
-  let isDark: Bool
   let isEnabled: Bool
 
   var body: some View {
@@ -14,9 +13,6 @@ private struct MacGlassInputBackground: View {
     shape
       .fill(Color.clear)
       .glassEffect(.regular, in: shape)
-      .overlay {
-        shape.fill(Color.white.opacity(isDark ? 0.08 : 0.14))
-      }
       .opacity(isEnabled ? 1.0 : 0.9)
       .allowsHitTesting(false)
   }
@@ -124,6 +120,11 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private var trailingSpacing: CGFloat = 6
   private var leadingReservedWidth: CGFloat = 0
   private var trailingReservedWidth: CGFloat = 0
+
+  private var effectiveFieldBackgroundColor: NSColor? {
+    customFieldBackgroundColor ?? customBackgroundColor
+  }
+
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let clearButton = NSButton(title: "", target: nil, action: nil)
     let firstTrailingButton = NSButton(title: "", target: nil, action: nil)
@@ -1042,9 +1043,12 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   }
 
   private func applyVisualStyle() {
+    let fieldBaseColor = effectiveFieldBackgroundColor
+
     appearance = NSAppearance(named: isDarkAppearance ? .darkAqua : .aqua)
-    layer?.backgroundColor = (customBackgroundColor ?? .clear).cgColor
+    layer?.backgroundColor = NSColor.clear.cgColor
     fieldClipView.layer?.cornerRadius = fieldCornerRadius
+    fieldClipView.layer?.backgroundColor = (fieldBaseColor ?? .clear).cgColor
     fieldClipView.alphaValue = controlEnabled ? 1.0 : disabledOpacity
     cancelButton.alphaValue = controlEnabled ? 1.0 : disabledOpacity
     fieldClipView.layer?.borderWidth = 1
@@ -1053,22 +1057,20 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     )).cgColor
 
     if #available(macOS 26.0, *) {
-      updateGlassBackground()
-      fieldBackgroundView.isHidden = true
-      glassHostingView?.isHidden = false
-      if let customFieldOverlayColor {
-        fieldTintOverlayView.layer?.backgroundColor = customFieldOverlayColor.cgColor
-      } else if let customFieldBackgroundColor {
-        fieldTintOverlayView.layer?.backgroundColor = customFieldBackgroundColor.withAlphaComponent(
-          isDarkAppearance ? 0.18 : 0.22
-        ).cgColor
+      if fieldBaseColor != nil {
+        fieldBackgroundView.isHidden = true
+        glassHostingView?.isHidden = true
+        fieldTintOverlayView.layer?.backgroundColor = (customFieldOverlayColor ?? .clear).cgColor
       } else {
-        fieldTintOverlayView.layer?.backgroundColor = NSColor.clear.cgColor
+        updateGlassBackground()
+        fieldBackgroundView.isHidden = true
+        glassHostingView?.isHidden = false
+        fieldTintOverlayView.layer?.backgroundColor = (customFieldOverlayColor ?? .clear).cgColor
       }
-    } else if let customFieldBackgroundColor {
+    } else if fieldBaseColor != nil {
       fieldBackgroundView.isHidden = true
       glassHostingView?.isHidden = true
-      fieldTintOverlayView.layer?.backgroundColor = customFieldBackgroundColor.cgColor
+      fieldTintOverlayView.layer?.backgroundColor = (customFieldOverlayColor ?? .clear).cgColor
     } else {
       glassHostingView?.isHidden = true
       fieldBackgroundView.isHidden = false
@@ -1291,7 +1293,6 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       rootView: AnyView(
         MacGlassInputBackground(
           cornerRadius: fieldCornerRadius,
-          isDark: isDarkAppearance,
           isEnabled: controlEnabled
         )
       )
@@ -1313,7 +1314,6 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     glassHostingView?.rootView = AnyView(
       MacGlassInputBackground(
         cornerRadius: fieldCornerRadius,
-        isDark: isDarkAppearance,
         isEnabled: controlEnabled
       )
     )

@@ -13,19 +13,21 @@ private final class LayoutAwareSearchContainerView: UIView {
 }
 
 @available(iOS 26.0, *)
+private extension Color {
+  func glassBackgroundEffect<S: Shape>(in shape: S) -> some View {
+    glassEffect(.regular, in: shape)
+  }
+}
+
+@available(iOS 26.0, *)
 private struct IOSGlassInputBackground: View {
   let cornerRadius: CGFloat
-  let isDark: Bool
   let isEnabled: Bool
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    shape
-      .fill(Color.clear)
-      .glassEffect(.regular, in: shape)
-      .overlay {
-        shape.fill(Color.white.opacity(isDark ? 0.08 : 0.14))
-      }
+    Color.clear
+      .glassBackgroundEffect(in: shape)
       .opacity(isEnabled ? 1.0 : 0.9)
       .allowsHitTesting(false)
   }
@@ -117,6 +119,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var clearButtonIcon: TrailingAction?
   private var sendButtonIcon: TrailingAction?
   private var disabledOpacity: CGFloat = 0.6
+  private var followsSystemAppearance: Bool = true
 
   private var compactHorizontalPadding: CGFloat = 16
   private var compactVerticalPadding: CGFloat = 8
@@ -130,6 +133,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var trailingSpacing: CGFloat = 6
   private var leadingReservedWidth: CGFloat = 0
   private var trailingReservedWidth: CGFloat = 0
+
+  private var effectiveFieldBackgroundColor: UIColor? {
+    customFieldBackgroundColor ?? customBackgroundColor
+  }
+
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let clearButton = UIButton(type: .system)
     let firstTrailingButton = UIButton(type: .system)
@@ -168,6 +176,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 	    var maxVisibleLines: Int = 1
 	    var focusEnabled: Bool = true
 	    var isDark: Bool = false
+      var hasExplicitBrightnessOverride = false
 	    var tint: UIColor? = nil
 	    var bg: UIColor? = nil
 	    var fieldBg: UIColor? = nil
@@ -205,7 +214,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 	      if let value = dict["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
 	      if let value = dict["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
 	      if let value = dict["focusEnabled"] as? NSNumber { focusEnabled = value.boolValue }
-	      if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
+	      if let value = dict["isDark"] as? NSNumber {
+          isDark = value.boolValue
+          hasExplicitBrightnessOverride = true
+        }
 	      if let behavior = dict["behavior"] as? [String: Any] {
 	        if let value = (behavior["showsLeadingAccessory"] as? NSNumber)?.boolValue {
 	          showsLeadingAccessory = value
@@ -301,8 +313,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
     container.backgroundColor = .clear
     if #available(iOS 13.0, *) {
-      container.overrideUserInterfaceStyle = isDark ? .dark : .light
+      container.overrideUserInterfaceStyle = .unspecified
     }
+      self.isDarkAppearance = isDark
+      self.followsSystemAppearance = !hasExplicitBrightnessOverride
 	    currentTint = tint
 	    customBackgroundColor = bg
 	    customFieldBackgroundColor = fieldBg
@@ -682,9 +696,14 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       case "setBrightness":
         if let params = call.arguments as? [String: Any], let isDark = (params["isDark"] as? NSNumber)?.boolValue {
           self.isDarkAppearance = isDark
+          self.followsSystemAppearance = false
           self.applyVisualStyle()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
+      case "followSystemBrightness":
+        self.followsSystemAppearance = true
+        self.applyVisualStyle()
+        result(nil)
       case "focus":
         if self.controlEnabled && self.focusEnabled {
           self.textView.becomeFirstResponder()
@@ -988,12 +1007,17 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   private func applyVisualStyle() {
     if #available(iOS 13.0, *) {
-      container.overrideUserInterfaceStyle = isDarkAppearance ? .dark : .light
+      container.overrideUserInterfaceStyle = followsSystemAppearance
+        ? .unspecified
+        : (isDarkAppearance ? .dark : .light)
     }
 
-    container.backgroundColor = customBackgroundColor ?? .clear
+    let fieldBaseColor = effectiveFieldBackgroundColor
+
+    container.backgroundColor = .clear
     fieldClipView.layer.cornerRadius = fieldCornerRadius
     fieldClipView.layer.cornerCurve = .continuous
+    fieldClipView.backgroundColor = fieldBaseColor ?? .clear
     fieldClipView.alpha = controlEnabled ? 1.0 : disabledOpacity
     cancelButton.alpha = controlEnabled ? 1.0 : disabledOpacity
     fieldClipView.layer.borderWidth = 1
@@ -1002,22 +1026,20 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     )).cgColor
 
     if #available(iOS 26.0, *) {
-      updateGlassBackground()
-      fieldBackgroundView.isHidden = true
-      glassHostingController?.view.isHidden = false
-      if let customFieldOverlayColor {
-        fieldTintOverlayView.backgroundColor = customFieldOverlayColor
-      } else if let customFieldBackgroundColor {
-        fieldTintOverlayView.backgroundColor = customFieldBackgroundColor.withAlphaComponent(
-          isDarkAppearance ? 0.18 : 0.22
-        )
+      if fieldBaseColor != nil {
+        fieldBackgroundView.isHidden = true
+        glassHostingController?.view.isHidden = true
+        fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
       } else {
-        fieldTintOverlayView.backgroundColor = .clear
+        updateGlassBackground()
+        fieldBackgroundView.isHidden = true
+        glassHostingController?.view.isHidden = false
+        fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
       }
-    } else if let customFieldBackgroundColor {
+    } else if fieldBaseColor != nil {
       fieldBackgroundView.isHidden = true
       glassHostingController?.view.isHidden = true
-      fieldTintOverlayView.backgroundColor = customFieldBackgroundColor
+      fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
     } else {
       glassHostingController?.view.isHidden = true
       fieldBackgroundView.isHidden = false
@@ -1102,7 +1124,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       rootView: AnyView(
         IOSGlassInputBackground(
           cornerRadius: fieldCornerRadius,
-          isDark: isDarkAppearance,
           isEnabled: controlEnabled
         )
       )
@@ -1126,7 +1147,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     glassHostingController?.rootView = AnyView(
       IOSGlassInputBackground(
         cornerRadius: fieldCornerRadius,
-        isDark: isDarkAppearance,
         isEnabled: controlEnabled
       )
     )
