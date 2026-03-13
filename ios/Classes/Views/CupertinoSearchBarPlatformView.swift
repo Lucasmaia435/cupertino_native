@@ -1,5 +1,4 @@
 import Flutter
-import SwiftUI
 import UIKit
 import CoreText
 
@@ -9,27 +8,6 @@ private final class LayoutAwareSearchContainerView: UIView {
   override func layoutSubviews() {
     super.layoutSubviews()
     onLayout?()
-  }
-}
-
-@available(iOS 26.0, *)
-private extension Color {
-  func glassBackgroundEffect<S: Shape>(in shape: S) -> some View {
-    glassEffect(.regular, in: shape)
-  }
-}
-
-@available(iOS 26.0, *)
-private struct IOSGlassInputBackground: View {
-  let cornerRadius: CGFloat
-  let isEnabled: Bool
-
-  var body: some View {
-    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    Color.clear
-      .glassBackgroundEffect(in: shape)
-      .opacity(isEnabled ? 1.0 : 0.9)
-      .allowsHitTesting(false)
   }
 }
 
@@ -58,8 +36,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private let channel: FlutterMethodChannel
   private let container: LayoutAwareSearchContainerView
   private let fieldClipView: UIView
+  private let fieldSolidBackgroundView: UIView
   private let fieldBackgroundView: UIVisualEffectView
   private let fieldTintOverlayView: UIView
+  private let fieldContentView: UIView
   private let textView: UITextView
   private let placeholderLabel: UILabel
   private let trailingStackView: UIStackView
@@ -68,7 +48,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private let sendButton: UIButton
   private let searchButton: UIButton
   private let cancelButton: UIButton
-  private var glassHostingController: UIHostingController<AnyView>?
   private var leadingSearchWidthConstraint: NSLayoutConstraint!
   private var searchButtonHeightConstraint: NSLayoutConstraint!
   private var searchButtonCenterYConstraint: NSLayoutConstraint!
@@ -138,6 +117,35 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     customFieldBackgroundColor ?? customBackgroundColor
   }
 
+  private func effectiveFieldHeight(for measuredHeight: CGFloat? = nil) -> CGFloat {
+    if let measuredHeight, measuredHeight > 0 {
+      return measuredHeight
+    }
+    if lastReportedHeight > 0 {
+      return lastReportedHeight
+    }
+    return requestedMinHeight
+  }
+
+  private func resolvedFieldCornerRadius(for height: CGFloat? = nil) -> CGFloat {
+    let referenceHeight = effectiveFieldHeight(for: height)
+    return max(0, min(fieldCornerRadius, referenceHeight / 2.0))
+  }
+
+  private func updateFieldShape(for height: CGFloat? = nil) {
+    let resolvedCornerRadius = resolvedFieldCornerRadius(for: height)
+    fieldClipView.layer.cornerRadius = resolvedCornerRadius
+    fieldClipView.layer.cornerCurve = .continuous
+    fieldSolidBackgroundView.layer.cornerRadius = resolvedCornerRadius
+    fieldSolidBackgroundView.layer.cornerCurve = .continuous
+    fieldBackgroundView.layer.cornerRadius = resolvedCornerRadius
+    fieldBackgroundView.layer.cornerCurve = .continuous
+    fieldTintOverlayView.layer.cornerRadius = resolvedCornerRadius
+    fieldTintOverlayView.layer.cornerCurve = .continuous
+    fieldContentView.layer.cornerRadius = resolvedCornerRadius
+    fieldContentView.layer.cornerCurve = .continuous
+  }
+
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     let clearButton = UIButton(type: .system)
     let firstTrailingButton = UIButton(type: .system)
@@ -148,8 +156,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     self.channel = FlutterMethodChannel(name: "CupertinoNativeSearchBar_\(viewId)", binaryMessenger: messenger)
     self.container = LayoutAwareSearchContainerView(frame: frame)
     self.fieldClipView = UIView(frame: .zero)
+    self.fieldSolidBackgroundView = UIView(frame: .zero)
     self.fieldBackgroundView = UIVisualEffectView(effect: nil)
     self.fieldTintOverlayView = UIView(frame: .zero)
+    self.fieldContentView = UIView(frame: .zero)
     self.textView = UITextView(frame: .zero)
     self.placeholderLabel = UILabel(frame: .zero)
     self.trailingStackView = UIStackView(arrangedSubviews: [clearButton, firstTrailingButton, secondTrailingButton, sendButton])
@@ -361,15 +371,28 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     }
 
     fieldClipView.translatesAutoresizingMaskIntoConstraints = false
+    fieldClipView.backgroundColor = .clear
     fieldClipView.clipsToBounds = true
-    fieldClipView.layer.cornerRadius = fieldCornerRadius
-    fieldClipView.layer.cornerCurve = .continuous
+    fieldClipView.layer.masksToBounds = true
+
+    fieldSolidBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+    fieldSolidBackgroundView.isUserInteractionEnabled = false
+    fieldSolidBackgroundView.clipsToBounds = true
+    fieldSolidBackgroundView.layer.cornerCurve = .continuous
 
     fieldBackgroundView.translatesAutoresizingMaskIntoConstraints = false
     fieldBackgroundView.isUserInteractionEnabled = false
+    fieldBackgroundView.clipsToBounds = true
 
     fieldTintOverlayView.translatesAutoresizingMaskIntoConstraints = false
     fieldTintOverlayView.isUserInteractionEnabled = false
+    fieldTintOverlayView.clipsToBounds = true
+    fieldTintOverlayView.layer.cornerCurve = .continuous
+
+    fieldContentView.translatesAutoresizingMaskIntoConstraints = false
+    fieldContentView.backgroundColor = .clear
+    fieldContentView.clipsToBounds = true
+    fieldContentView.layer.cornerCurve = .continuous
 
     textView.translatesAutoresizingMaskIntoConstraints = false
     textView.delegate = self
@@ -455,29 +478,30 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
     container.addSubview(fieldClipView)
     container.addSubview(cancelButton)
+    fieldClipView.addSubview(fieldSolidBackgroundView)
     fieldClipView.addSubview(fieldBackgroundView)
-    installGlassBackgroundIfNeeded()
     fieldClipView.addSubview(fieldTintOverlayView)
-    fieldClipView.addSubview(searchButton)
-    fieldClipView.addSubview(textView)
-    fieldClipView.addSubview(placeholderLabel)
-    fieldClipView.addSubview(trailingStackView)
+    fieldClipView.addSubview(fieldContentView)
+    fieldContentView.addSubview(searchButton)
+    fieldContentView.addSubview(textView)
+    fieldContentView.addSubview(placeholderLabel)
+    fieldContentView.addSubview(trailingStackView)
 
 	    let firstLineCenterOffset = currentFirstLineCenterOffset()
-    searchButtonCenterYConstraint = searchButton.centerYAnchor.constraint(equalTo: fieldClipView.centerYAnchor)
+    searchButtonCenterYConstraint = searchButton.centerYAnchor.constraint(equalTo: fieldContentView.centerYAnchor)
     trailingStackFirstLineCenterYConstraint = trailingStackView.centerYAnchor.constraint(
       equalTo: textView.topAnchor,
       constant: firstLineCenterOffset
     )
     trailingStackCenterYConstraint = trailingStackView.centerYAnchor.constraint(
-      equalTo: fieldClipView.centerYAnchor
+      equalTo: fieldContentView.centerYAnchor
     )
     trailingStackTrailingConstraint = trailingStackView.trailingAnchor.constraint(
-      equalTo: fieldClipView.trailingAnchor,
+      equalTo: fieldContentView.trailingAnchor,
       constant: -(compactHorizontalPadding - 2)
     )
     trailingStackBottomConstraint = trailingStackView.bottomAnchor.constraint(
-      equalTo: fieldClipView.bottomAnchor,
+      equalTo: fieldContentView.bottomAnchor,
       constant: -(compactVerticalPadding - 2)
     )
     placeholderTopConstraint = placeholderLabel.centerYAnchor.constraint(
@@ -498,6 +522,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       cancelButton.topAnchor.constraint(greaterThanOrEqualTo: container.topAnchor),
       cancelButton.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor),
 
+      fieldSolidBackgroundView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
+      fieldSolidBackgroundView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
+      fieldSolidBackgroundView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      fieldSolidBackgroundView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+
       fieldBackgroundView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
       fieldBackgroundView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
       fieldBackgroundView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
@@ -508,7 +537,12 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       fieldTintOverlayView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
       fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
 
-	      searchButton.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor, constant: compactHorizontalPadding - 4),
+      fieldContentView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
+      fieldContentView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
+      fieldContentView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
+      fieldContentView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+
+	      searchButton.leadingAnchor.constraint(equalTo: fieldContentView.leadingAnchor, constant: compactHorizontalPadding - 4),
 	      searchButtonCenterYConstraint,
 	      searchButtonHeightConstraint,
 	      leadingSearchWidthConstraint,
@@ -519,13 +553,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
       textView.leadingAnchor.constraint(equalTo: searchButton.trailingAnchor, constant: 4),
       textView.trailingAnchor.constraint(equalTo: trailingStackView.leadingAnchor, constant: -8),
-      textView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
-      textView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+      textView.topAnchor.constraint(equalTo: fieldContentView.topAnchor),
+      textView.bottomAnchor.constraint(equalTo: fieldContentView.bottomAnchor),
 
       placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
       placeholderLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingStackView.leadingAnchor, constant: -8),
       placeholderTopConstraint,
-      placeholderLabel.bottomAnchor.constraint(lessThanOrEqualTo: fieldClipView.bottomAnchor),
+      placeholderLabel.bottomAnchor.constraint(lessThanOrEqualTo: fieldContentView.bottomAnchor),
     ])
 
 	    applyTrailingActions(trailingActions)
@@ -1013,35 +1047,41 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     }
 
     let fieldBaseColor = effectiveFieldBackgroundColor
+    let usesGlassBackground: Bool
+    if #available(iOS 26.0, *) {
+      usesGlassBackground = fieldBaseColor == nil
+    } else {
+      usesGlassBackground = false
+    }
 
     container.backgroundColor = .clear
-    fieldClipView.layer.cornerRadius = fieldCornerRadius
-    fieldClipView.layer.cornerCurve = .continuous
-    fieldClipView.backgroundColor = fieldBaseColor ?? .clear
+    fieldClipView.backgroundColor = .clear
     fieldClipView.alpha = controlEnabled ? 1.0 : disabledOpacity
     cancelButton.alpha = controlEnabled ? 1.0 : disabledOpacity
-    fieldClipView.layer.borderWidth = 1
-    fieldClipView.layer.borderColor = (customFieldBorderColor ?? UIColor.white.withAlphaComponent(
+    fieldSolidBackgroundView.backgroundColor = fieldBaseColor ?? .clear
+    fieldSolidBackgroundView.isHidden = fieldBaseColor == nil
+    let resolvedBorderColor = customFieldBorderColor ?? UIColor.white.withAlphaComponent(
       isDarkAppearance ? 0.16 : 0.34
-    )).cgColor
+    )
+    fieldContentView.layer.borderWidth = usesGlassBackground && customFieldBorderColor == nil ? 0 : 1
+    fieldContentView.layer.borderColor = resolvedBorderColor.cgColor
+    updateFieldShape(for: requestedMinHeight)
 
     if #available(iOS 26.0, *) {
       if fieldBaseColor != nil {
         fieldBackgroundView.isHidden = true
-        glassHostingController?.view.isHidden = true
+        fieldBackgroundView.effect = nil
         fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
       } else {
-        updateGlassBackground()
-        fieldBackgroundView.isHidden = true
-        glassHostingController?.view.isHidden = false
+        fieldBackgroundView.isHidden = false
+        fieldBackgroundView.effect = UIGlassEffect(style: .regular)
         fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
       }
     } else if fieldBaseColor != nil {
       fieldBackgroundView.isHidden = true
-      glassHostingController?.view.isHidden = true
+      fieldBackgroundView.effect = nil
       fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
     } else {
-      glassHostingController?.view.isHidden = true
       fieldBackgroundView.isHidden = false
       fieldBackgroundView.effect = currentBlurEffect()
       fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
@@ -1114,43 +1154,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private func currentFirstLineCenterOffset() -> CGFloat {
     let lineHeight = ceil(textView.font?.lineHeight ?? UIFont.systemFont(ofSize: 17).lineHeight)
     return textView.textContainerInset.top + (lineHeight / 2.0)
-  }
-
-  private func installGlassBackgroundIfNeeded() {
-    guard #available(iOS 26.0, *) else { return }
-    guard glassHostingController == nil else { return }
-
-    let host = UIHostingController(
-      rootView: AnyView(
-        IOSGlassInputBackground(
-          cornerRadius: fieldCornerRadius,
-          isEnabled: controlEnabled
-        )
-      )
-    )
-    host.view.translatesAutoresizingMaskIntoConstraints = false
-    host.view.backgroundColor = .clear
-    host.view.isUserInteractionEnabled = false
-    glassHostingController = host
-    fieldClipView.addSubview(host.view)
-    NSLayoutConstraint.activate([
-      host.view.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
-      host.view.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
-      host.view.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
-      host.view.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
-    ])
-  }
-
-  private func updateGlassBackground() {
-    guard #available(iOS 26.0, *) else { return }
-    installGlassBackgroundIfNeeded()
-    glassHostingController?.rootView = AnyView(
-      IOSGlassInputBackground(
-        cornerRadius: fieldCornerRadius,
-        isEnabled: controlEnabled
-      )
-    )
-    glassHostingController?.view.isHidden = false
   }
 
   private func updateAccessoryButtonConstraints() {
@@ -1376,6 +1379,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       requestedMaxHeight,
       max(requestedMinHeight, min(contentHeight, maxVisibleHeight))
     )
+    updateFieldShape(for: desiredHeight)
     updateSendButtonSize(for: requestedMinHeight)
     updateTrailingAccessoryAlignment(
       hasText: !(textView.text ?? "").isEmpty,

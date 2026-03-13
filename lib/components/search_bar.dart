@@ -299,6 +299,16 @@ class _CNTextFieldState extends State<CNTextField> {
     );
   }
 
+  void _handleExpandedTapAreaTap() {
+    if (!_canInteractWithTextInput) return;
+    if (!_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
+    if (!_isNativePlatform) {
+      widget.onTap?.call();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -805,16 +815,28 @@ class _CNTextFieldState extends State<CNTextField> {
       borderRadius: BorderRadius.circular(_layout.borderRadius),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final fieldHeight = constraints.maxHeight.isFinite
-              ? constraints.maxHeight
-              : _effectiveNativeHeight;
+          final fieldHeight = _effectiveNativeHeight;
           final leadingTop = _leadingLastLineTop(context, fieldHeight);
           final trailingTop = _trailingLastLineTop(context, fieldHeight);
+          final tapTrailingInset = constraints.maxWidth.isFinite
+              ? math.min(_trailingReservedWidth, constraints.maxWidth)
+              : _trailingReservedWidth + 50;
 
           return Stack(
             fit: StackFit.expand,
             children: [
               child,
+              if (_canInteractWithTextInput && !_focusNode.hasFocus)
+                PositionedDirectional(
+                  top: 0,
+                  bottom: 0,
+                  start: 0,
+                  end: tapTrailingInset,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _handleExpandedTapAreaTap,
+                  ),
+                ),
               if (leading != null)
                 PositionedDirectional(
                   start: leadingInset,
@@ -927,6 +949,9 @@ class _CNTextFieldState extends State<CNTextField> {
                       .toDouble();
               final leadingTop = _leadingLastLineTop(context, fieldHeight);
               final trailingTop = _trailingLastLineTop(context, fieldHeight);
+              final tapTrailingInset = constraints.maxWidth.isFinite
+                  ? math.min(_trailingReservedWidth, constraints.maxWidth)
+                  : _trailingReservedWidth;
 
               return _SizeObserver(
                 onSize: _updateFallbackFieldSize,
@@ -1008,6 +1033,17 @@ class _CNTextFieldState extends State<CNTextField> {
                         ),
                       ),
                     ),
+                    if (canInteractWithTextInput && !_focusNode.hasFocus)
+                      PositionedDirectional(
+                        top: 0,
+                        bottom: 0,
+                        start: 0,
+                        end: tapTrailingInset,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: _handleExpandedTapAreaTap,
+                        ),
+                      ),
                     if (_hasLeadingAccessory)
                       PositionedDirectional(
                         start: math.max(
