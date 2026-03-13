@@ -46,6 +46,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
   private let channel: FlutterMethodChannel
   private let fieldClipView: NSView
+  private let fieldClickGestureRecognizer: NSClickGestureRecognizer
   private let fieldBackgroundView: NSVisualEffectView
   private let fieldTintOverlayView: NSView
   private let scrollView: NSScrollView
@@ -134,8 +135,10 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     let sendButton = NSButton(title: "", target: nil, action: nil)
     let searchButton = NSButton(title: "", target: nil, action: nil)
     let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
+    let fieldClickGestureRecognizer = NSClickGestureRecognizer(target: nil, action: nil)
     self.channel = FlutterMethodChannel(name: "CupertinoNativeSearchBar_\(viewId)", binaryMessenger: messenger)
     self.fieldClipView = NSView(frame: .zero)
+    self.fieldClickGestureRecognizer = fieldClickGestureRecognizer
     self.fieldBackgroundView = NSVisualEffectView(frame: .zero)
     self.fieldTintOverlayView = NSView(frame: .zero)
     self.scrollView = NonFlashingScrollView(frame: .zero)
@@ -351,6 +354,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     fieldTintOverlayView.translatesAutoresizingMaskIntoConstraints = false
     fieldTintOverlayView.wantsLayer = true
 
+    fieldClickGestureRecognizer.target = self
+    fieldClickGestureRecognizer.action = #selector(onFieldClicked(_:))
+
     scrollView.translatesAutoresizingMaskIntoConstraints = false
     scrollView.drawsBackground = false
     scrollView.borderType = .noBorder
@@ -445,6 +451,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
     addSubview(fieldClipView)
     addSubview(cancelButton)
+    fieldClipView.addGestureRecognizer(fieldClickGestureRecognizer)
     fieldClipView.addSubview(fieldBackgroundView)
     installGlassBackgroundIfNeeded()
     fieldClipView.addSubview(fieldTintOverlayView)
@@ -830,6 +837,22 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     channel.invokeMethod("trailingActionPressed", arguments: ["index": index])
   }
 
+  @objc private func onFieldClicked(_ recognizer: NSClickGestureRecognizer) {
+    guard recognizer.state == .ended, controlEnabled, focusEnabled else {
+      return
+    }
+    if window?.firstResponder === textView {
+      return
+    }
+
+    let location = recognizer.location(in: fieldClipView)
+    if shouldIgnoreFieldClick(on: fieldClipView.hitTest(location)) {
+      return
+    }
+
+    window?.makeFirstResponder(textView)
+  }
+
   @objc private func onSearchPressed() {
     guard controlEnabled && showsLeadingAccessory && leadingAccessoryTriggersSubmit else { return }
     channel.invokeMethod("submitted", arguments: ["text": textView.string])
@@ -911,6 +934,17 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     arguments["text"] = text
     arguments["height"] = Double(height)
     return arguments
+  }
+
+  private func shouldIgnoreFieldClick(on hitView: NSView?) -> Bool {
+    var current = hitView
+    while let view = current {
+      if view is NSControl {
+        return true
+      }
+      current = view.superview
+    }
+    return false
   }
 
   private func applyPlaceholder(_ placeholder: String?) {

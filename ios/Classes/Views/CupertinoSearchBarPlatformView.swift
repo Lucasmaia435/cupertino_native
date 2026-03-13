@@ -36,6 +36,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private let channel: FlutterMethodChannel
   private let container: LayoutAwareSearchContainerView
   private let fieldClipView: UIView
+  private let fieldTapGestureRecognizer: UITapGestureRecognizer
   private let fieldSolidBackgroundView: UIView
   private let fieldBackgroundView: UIVisualEffectView
   private let fieldTintOverlayView: UIView
@@ -154,9 +155,11 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     let sendButton = UIButton(type: .system)
     let searchButton = UIButton(type: .system)
     let cancelButton = UIButton(type: .system)
+    let fieldTapGestureRecognizer = UITapGestureRecognizer(target: nil, action: nil)
     self.channel = FlutterMethodChannel(name: "CupertinoNativeSearchBar_\(viewId)", binaryMessenger: messenger)
     self.container = LayoutAwareSearchContainerView(frame: frame)
     self.fieldClipView = UIView(frame: .zero)
+    self.fieldTapGestureRecognizer = fieldTapGestureRecognizer
     self.fieldSolidBackgroundView = UIView(frame: .zero)
     self.fieldBackgroundView = UIVisualEffectView(effect: nil)
     self.fieldTintOverlayView = UIView(frame: .zero)
@@ -395,6 +398,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     fieldContentView.clipsToBounds = true
     fieldContentView.layer.cornerCurve = .continuous
 
+    fieldTapGestureRecognizer.cancelsTouchesInView = false
+    fieldTapGestureRecognizer.addTarget(self, action: #selector(onFieldTapped(_:)))
+
     textView.translatesAutoresizingMaskIntoConstraints = false
     textView.delegate = self
     textView.backgroundColor = .clear
@@ -479,6 +485,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
     container.addSubview(fieldClipView)
     container.addSubview(cancelButton)
+    fieldClipView.addGestureRecognizer(fieldTapGestureRecognizer)
     fieldClipView.addSubview(fieldSolidBackgroundView)
     fieldClipView.addSubview(fieldBackgroundView)
     fieldClipView.addSubview(fieldTintOverlayView)
@@ -830,6 +837,22 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     channel.invokeMethod("trailingActionPressed", arguments: ["index": index])
   }
 
+  @objc private func onFieldTapped(_ recognizer: UITapGestureRecognizer) {
+    guard recognizer.state == .ended, controlEnabled, focusEnabled else {
+      return
+    }
+    if textView.isFirstResponder {
+      return
+    }
+
+    let location = recognizer.location(in: fieldClipView)
+    if shouldIgnoreFieldTap(on: fieldClipView.hitTest(location, with: nil)) {
+      return
+    }
+
+    textView.becomeFirstResponder()
+  }
+
   @objc private func onSearchPressed() {
     guard controlEnabled && showsLeadingAccessory && leadingAccessoryTriggersSubmit else { return }
     channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
@@ -906,6 +929,17 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     arguments["text"] = text
     arguments["height"] = Double(height)
     return arguments
+  }
+
+  private func shouldIgnoreFieldTap(on hitView: UIView?) -> Bool {
+    var current = hitView
+    while let view = current {
+      if view is UIControl {
+        return true
+      }
+      current = view.superview
+    }
+    return false
   }
 
   private func applyPlaceholder(_ placeholder: String?) {
