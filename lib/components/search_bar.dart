@@ -818,9 +818,6 @@ class _CNTextFieldState extends State<CNTextField> {
           final fieldHeight = _effectiveNativeHeight;
           final leadingTop = _leadingLastLineTop(context, fieldHeight);
           final trailingTop = _trailingLastLineTop(context, fieldHeight);
-          final tapTrailingInset = constraints.maxWidth.isFinite
-              ? math.min(_trailingReservedWidth, constraints.maxWidth)
-              : _trailingReservedWidth + 50;
 
           return Stack(
             fit: StackFit.expand,
@@ -831,7 +828,7 @@ class _CNTextFieldState extends State<CNTextField> {
                   top: 0,
                   bottom: 0,
                   start: 0,
-                  end: tapTrailingInset,
+                  end: 0,
                   child: GestureDetector(
                     behavior: HitTestBehavior.translucent,
                     onTap: _handleExpandedTapAreaTap,
@@ -949,9 +946,6 @@ class _CNTextFieldState extends State<CNTextField> {
                       .toDouble();
               final leadingTop = _leadingLastLineTop(context, fieldHeight);
               final trailingTop = _trailingLastLineTop(context, fieldHeight);
-              final tapTrailingInset = constraints.maxWidth.isFinite
-                  ? math.min(_trailingReservedWidth, constraints.maxWidth)
-                  : _trailingReservedWidth;
 
               return _SizeObserver(
                 onSize: _updateFallbackFieldSize,
@@ -1038,7 +1032,7 @@ class _CNTextFieldState extends State<CNTextField> {
                         top: 0,
                         bottom: 0,
                         start: 0,
-                        end: tapTrailingInset,
+                        end: 0,
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onTap: _handleExpandedTapAreaTap,
