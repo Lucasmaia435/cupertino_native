@@ -284,12 +284,15 @@ class _CNTextFieldState extends State<CNTextField> {
     );
   }
 
-  double _leadingLastLineTop(BuildContext context, double fieldHeight) {
-    return _accessoryLastLineTop(
-      context,
-      fieldHeight,
-      accessoryHeight: _leadingHeight,
-    );
+  double _leadingTextTop(BuildContext context) {
+    final lineHeight = _resolvedLineHeight(context);
+    final resolvedLeadingHeight = _leadingHeight > 0
+        ? _leadingHeight
+        : lineHeight;
+    final textTop =
+        _resolvedTextVerticalPadding(context) +
+        _layout.textOpticalVerticalOffset;
+    return math.max(0.0, textTop + ((lineHeight - resolvedLeadingHeight) / 2));
   }
 
   double _trailingLastLineTop(BuildContext context, double fieldHeight) {
@@ -887,7 +890,7 @@ class _CNTextFieldState extends State<CNTextField> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final fieldHeight = _effectiveNativeHeight;
-          final leadingTop = _leadingLastLineTop(context, fieldHeight);
+          final leadingTop = _leadingTextTop(context);
           final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
           return Stack(
@@ -1015,7 +1018,7 @@ class _CNTextFieldState extends State<CNTextField> {
                   (_reportedFallbackFieldHeight ?? minFieldHeight)
                       .clamp(minFieldHeight, maxFieldHeight)
                       .toDouble();
-              final leadingTop = _leadingLastLineTop(context, fieldHeight);
+              final leadingTop = _leadingTextTop(context);
               final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
               return _SizeObserver(
