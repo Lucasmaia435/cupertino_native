@@ -185,6 +185,7 @@ class _CNTextFieldState extends State<CNTextField> {
   double? _reportedFallbackFieldHeight;
 
   String? _lastText;
+  String? _lastSelectionSignature;
   String? _lastPlaceholder;
   bool? _lastEnabled;
   bool? _lastIsDark;
@@ -385,7 +386,10 @@ class _CNTextFieldState extends State<CNTextField> {
   void _onTextControllerChanged() {
     if (_isApplyingNativeTextChange) return;
     if (_isNativePlatform) {
-      _syncTextToNativeIfNeeded();
+      final channel = _channel;
+      if (channel != null) {
+        _syncEditingStateToNativeIfNeeded(channel);
+      }
     }
     if (mounted) {
       setState(() {});
@@ -412,15 +416,69 @@ class _CNTextFieldState extends State<CNTextField> {
     );
   }
 
-  void _applyNativeText(String text) {
-    if (_textController.text == text) return;
+  int _clampSelectionOffset(int offset, int textLength) =>
+      offset.clamp(0, textLength);
+
+  TextSelection _selectionForText(String text, {TextSelection? selection}) {
+    final source = selection ?? _textController.selection;
+    final textLength = text.length;
+    if (!source.isValid) {
+      return TextSelection.collapsed(offset: textLength);
+    }
+
+    return TextSelection(
+      baseOffset: _clampSelectionOffset(source.baseOffset, textLength),
+      extentOffset: _clampSelectionOffset(source.extentOffset, textLength),
+      affinity: source.affinity,
+      isDirectional: source.isDirectional,
+    );
+  }
+
+  String _selectionSignature(TextSelection selection) {
+    final start = math.min(selection.baseOffset, selection.extentOffset);
+    final end = math.max(selection.baseOffset, selection.extentOffset);
+    return '$start:$end';
+  }
+
+  TextSelection? _parseNativeSelection(Map? args, String text) {
+    final baseOffset = (args?['baseOffset'] as num?)?.toInt();
+    final extentOffset = (args?['extentOffset'] as num?)?.toInt();
+    if (baseOffset == null || extentOffset == null) return null;
+
+    return _selectionForText(
+      text,
+      selection: TextSelection(
+        baseOffset: baseOffset,
+        extentOffset: extentOffset,
+      ),
+    );
+  }
+
+  void _applyNativeText(String text, {TextSelection? selection}) {
+    final effectiveSelection = _selectionForText(text, selection: selection);
+    final currentSelection = _selectionForText(_textController.text);
+    final currentSelectionSignature = _selectionSignature(currentSelection);
+    final nextSelectionSignature = _selectionSignature(effectiveSelection);
+    if (_textController.text == text &&
+        currentSelectionSignature == nextSelectionSignature) {
+      _lastText = text;
+      _lastSelectionSignature = nextSelectionSignature;
+      return;
+    }
+
     _isApplyingNativeTextChange = true;
     _textController.value = TextEditingValue(
       text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      selection: effectiveSelection,
       composing: TextRange.empty,
     );
     _isApplyingNativeTextChange = false;
+    _lastText = text;
+    _lastSelectionSignature = nextSelectionSignature;
+  }
+
+  void _applyNativeSelection(TextSelection selection) {
+    _applyNativeText(_textController.text, selection: selection);
   }
 
   void _applyNativeFocus(bool focused) {
@@ -492,15 +550,23 @@ class _CNTextFieldState extends State<CNTextField> {
     });
   }
 
-  Future<void> _syncTextToNativeIfNeeded() async {
-    final channel = _channel;
-    if (channel == null) return;
-
+  Future<void> _syncEditingStateToNativeIfNeeded(MethodChannel channel) async {
     final text = _textController.text;
-    if (_lastText == text) return;
+    final selection = _selectionForText(text);
+    final selectionSignature = _selectionSignature(selection);
 
-    await channel.invokeMethod('setText', {'text': text});
-    _lastText = text;
+    if (_lastText != text) {
+      await channel.invokeMethod('setText', {'text': text});
+      _lastText = text;
+    }
+
+    if (_lastSelectionSignature != selectionSignature) {
+      await channel.invokeMethod('setSelection', {
+        'baseOffset': selection.baseOffset,
+        'extentOffset': selection.extentOffset,
+      });
+      _lastSelectionSignature = selectionSignature;
+    }
   }
 
   Future<void> _syncFocusToNativeIfNeeded({bool forceUnfocus = false}) async {
@@ -578,6 +644,9 @@ class _CNTextFieldState extends State<CNTextField> {
 
   void _cacheCurrentProps() {
     _lastText = _textController.text;
+    _lastSelectionSignature = _selectionSignature(
+      _selectionForText(_textController.text),
+    );
     _lastPlaceholder = widget.placeholder;
     _lastEnabled = widget.enabled;
     _lastIsDark = _isDark;
@@ -591,7 +660,6 @@ class _CNTextFieldState extends State<CNTextField> {
     final channel = _channel;
     if (channel == null) return;
 
-    final text = _textController.text;
     final placeholder = widget.placeholder;
     final enabled = widget.enabled;
     final focusEnabled = _canInteractWithTextInput;
@@ -599,10 +667,7 @@ class _CNTextFieldState extends State<CNTextField> {
     final layoutSignature = _jsonSignature(_encodeLayout());
     final styleSignature = _jsonSignature(_encodeStyle());
 
-    if (_lastText != text) {
-      await channel.invokeMethod('setText', {'text': text});
-      _lastText = text;
-    }
+    await _syncEditingStateToNativeIfNeeded(channel);
 
     if (_lastPlaceholder != placeholder) {
       await channel.invokeMethod('setPlaceholder', {
@@ -665,6 +730,7 @@ class _CNTextFieldState extends State<CNTextField> {
     _channel = channel;
     channel.setMethodCallHandler(_onMethodCall);
     _cacheCurrentProps();
+    _lastSelectionSignature = null;
     _lastBehaviorSignature = null;
     _lastLayoutSignature = null;
     _lastStyleSignature = null;
@@ -681,14 +747,19 @@ class _CNTextFieldState extends State<CNTextField> {
       case 'textChanged':
         final text = args?['text'] as String?;
         if (text != null) {
-          _applyNativeText(text);
+          _applyNativeText(text, selection: _parseNativeSelection(args, text));
           widget.onChanged?.call(text);
-          _lastText = text;
         }
         final height = (args?['height'] as num?)?.toDouble();
         if (height != null) {
           _applyNativeHeight(height);
         }
+        break;
+      case 'selectionChanged':
+        _applyNativeSelection(
+          _parseNativeSelection(args, _textController.text) ??
+              _selectionForText(_textController.text),
+        );
         break;
       case 'heightChanged':
         final height = (args?['height'] as num?)?.toDouble();

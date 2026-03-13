@@ -93,6 +93,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var lastReportedHeight: CGFloat = 0
   private var isDarkAppearance = false
   private var isApplyingProgrammaticText = false
+  private var isApplyingProgrammaticSelection = false
   private var hasInteractedWithField = false
   private var leadingAccessoryIcon: TrailingAction?
   private var clearButtonIcon: TrailingAction?
@@ -595,6 +596,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
           self.applyText(value)
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing text", details: nil)) }
+      case "setSelection":
+        if let params = call.arguments as? [String: Any],
+           let baseOffset = (params["baseOffset"] as? NSNumber)?.intValue,
+           let extentOffset = (params["extentOffset"] as? NSNumber)?.intValue {
+          self.applySelection(baseOffset: baseOffset, extentOffset: extentOffset)
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing selection", details: nil)) }
       case "setPlaceholder":
         if let params = call.arguments as? [String: Any] {
           self.applyPlaceholder(params["placeholder"] as? String)
@@ -757,12 +765,20 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   }
 
   func textViewDidChange(_ textView: UITextView) {
+    guard !isApplyingProgrammaticText else { return }
     refreshAccessoryButtons()
     let height = refreshHeightAndNotifyIfNeeded()
-    channel.invokeMethod("textChanged", arguments: [
-      "text": textView.text ?? "",
-      "height": Double(height)
-    ])
+    channel.invokeMethod(
+      "textChanged",
+      arguments: textChangedArguments(text: textView.text ?? "", height: height)
+    )
+  }
+
+  func textViewDidChangeSelection(_ textView: UITextView) {
+    guard !isApplyingProgrammaticText && !isApplyingProgrammaticSelection else {
+      return
+    }
+    channel.invokeMethod("selectionChanged", arguments: currentSelectionArguments())
   }
 
   func textViewDidBeginEditing(_ textView: UITextView) {
@@ -785,20 +801,20 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     guard controlEnabled else { return }
     applyText("")
     let height = refreshHeightAndNotifyIfNeeded(force: true)
-    channel.invokeMethod("textChanged", arguments: [
-      "text": "",
-      "height": Double(height)
-    ])
+    channel.invokeMethod(
+      "textChanged",
+      arguments: textChangedArguments(text: "", height: height)
+    )
   }
 
   @objc private func onCancelPressed() {
     guard controlEnabled else { return }
     applyText("")
     let height = refreshHeightAndNotifyIfNeeded(force: true)
-    channel.invokeMethod("textChanged", arguments: [
-      "text": "",
-      "height": Double(height)
-    ])
+    channel.invokeMethod(
+      "textChanged",
+      arguments: textChangedArguments(text: "", height: height)
+    )
     channel.invokeMethod("cancelled", arguments: nil)
     textView.resignFirstResponder()
   }
@@ -852,11 +868,44 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private func applyText(_ text: String) {
     guard textView.text != text else { return }
     isApplyingProgrammaticText = true
+    defer { isApplyingProgrammaticText = false }
     textView.text = text
-    isApplyingProgrammaticText = false
     updatePlaceholderVisibility()
     refreshAccessoryButtons()
     refreshHeightAndNotifyIfNeeded(force: true)
+  }
+
+  private func applySelection(baseOffset: Int, extentOffset: Int) {
+    let range = clampedSelectionRange(baseOffset: baseOffset, extentOffset: extentOffset)
+    guard textView.selectedRange != range else { return }
+    isApplyingProgrammaticSelection = true
+    defer { isApplyingProgrammaticSelection = false }
+    textView.selectedRange = range
+  }
+
+  private func clampedSelectionRange(baseOffset: Int, extentOffset: Int) -> NSRange {
+    let textLength = textView.text?.utf16.count ?? 0
+    let clampedBase = max(0, min(baseOffset, textLength))
+    let clampedExtent = max(0, min(extentOffset, textLength))
+    let location = min(clampedBase, clampedExtent)
+    let length = abs(clampedExtent - clampedBase)
+    return NSRange(location: location, length: length)
+  }
+
+  private func currentSelectionArguments() -> [String: Any] {
+    let selectedRange = textView.selectedRange
+    let baseOffset = selectedRange.location == NSNotFound ? 0 : selectedRange.location
+    return [
+      "baseOffset": baseOffset,
+      "extentOffset": baseOffset + selectedRange.length
+    ]
+  }
+
+  private func textChangedArguments(text: String, height: CGFloat) -> [String: Any] {
+    var arguments = currentSelectionArguments()
+    arguments["text"] = text
+    arguments["height"] = Double(height)
+    return arguments
   }
 
   private func applyPlaceholder(_ placeholder: String?) {
