@@ -8,22 +8,56 @@ mixin CNPlatformViewModalVisibility<T extends StatefulWidget> on State<T> {
   bool _desiredVisible = true;
   bool? _lastSentVisible;
   bool _syncScheduled = false;
+  bool _monitorScheduled = false;
   MethodChannel? _lastChannel;
+  ModalRoute<dynamic>? _route;
 
   /// The method channel currently attached to the platform view instance.
   @protected
   MethodChannel? get visibilityChannel;
 
+  void _updateDesiredVisibility() {
+    final route = _route;
+    final isCurrent = route?.isCurrent ?? true;
+    final handlesLocalHistory = route?.willHandlePopInternally ?? false;
+    _desiredVisible = isCurrent && !handlesLocalHistory;
+  }
+
+  bool get _shouldMonitorRouteState =>
+      (_route?.canPop ?? false) || !_desiredVisible;
+
+  void _ensurePlatformViewVisibilityMonitor() {
+    if (_monitorScheduled || !_shouldMonitorRouteState) return;
+    _monitorScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _monitorScheduled = false;
+      if (!mounted) return;
+
+      final previousVisible = _desiredVisible;
+      _updateDesiredVisibility();
+      if (previousVisible != _desiredVisible) {
+        _schedulePlatformViewVisibilitySync();
+      }
+
+      if (_shouldMonitorRouteState) {
+        _ensurePlatformViewVisibilityMonitor();
+      }
+    });
+  }
+
   /// Recomputes the desired visibility from the current modal route state.
   @protected
   void trackPlatformViewModalVisibility() {
-    _desiredVisible = ModalRoute.isCurrentOf(context) ?? true;
+    _route = ModalRoute.of(context);
+    _updateDesiredVisibility();
+    _ensurePlatformViewVisibilityMonitor();
     _schedulePlatformViewVisibilitySync();
   }
 
   /// Forces a sync after a platform view channel has been attached.
   @protected
   void syncPlatformViewModalVisibility() {
+    _ensurePlatformViewVisibilityMonitor();
     _schedulePlatformViewVisibilitySync();
   }
 

@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
+import '../channel/platform_view_modal_visibility.dart';
 
 /// Layout configuration for [CNTextField].
 class CNTextFieldLayout {
@@ -165,7 +166,8 @@ class CNTextField extends StatefulWidget {
   State<CNTextField> createState() => _CNTextFieldState();
 }
 
-class _CNTextFieldState extends State<CNTextField> {
+class _CNTextFieldState extends State<CNTextField>
+    with CNPlatformViewModalVisibility<CNTextField> {
   MethodChannel? _channel;
   late final TextEditingController _fallbackController;
   late final FocusNode _fallbackFocusNode;
@@ -208,6 +210,9 @@ class _CNTextFieldState extends State<CNTextField> {
   bool get _isNativePlatform =>
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
+
+  @override
+  MethodChannel? get visibilityChannel => _channel;
 
   bool get _canInteractWithTextInput =>
       widget.enabled && _focusNode.canRequestFocus;
@@ -732,6 +737,7 @@ class _CNTextFieldState extends State<CNTextField> {
     final channel = MethodChannel('CupertinoNativeSearchBar_$id');
     _channel = channel;
     channel.setMethodCallHandler(_onMethodCall);
+    syncPlatformViewModalVisibility();
     _cacheCurrentProps();
     _lastSelectionSignature = null;
     _lastBehaviorSignature = null;
@@ -828,6 +834,8 @@ class _CNTextFieldState extends State<CNTextField> {
     if (!_isNativePlatform) {
       return _buildFallback(context);
     }
+
+    trackPlatformViewModalVisibility();
 
     if (!_canInteractWithTextInput && _focusNode.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
