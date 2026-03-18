@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show BottomSheet;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -20,7 +21,10 @@ mixin CNPlatformViewModalVisibility<T extends StatefulWidget> on State<T> {
     final route = _route;
     final isCurrent = route?.isCurrent ?? true;
     final handlesLocalHistory = route?.willHandlePopInternally ?? false;
-    _desiredVisible = isCurrent && !handlesLocalHistory;
+    final isInsideBottomSheet =
+        context.findAncestorWidgetOfExactType<BottomSheet>() != null;
+    _desiredVisible =
+        isCurrent && (!handlesLocalHistory || isInsideBottomSheet);
   }
 
   bool get _shouldMonitorRouteState =>
