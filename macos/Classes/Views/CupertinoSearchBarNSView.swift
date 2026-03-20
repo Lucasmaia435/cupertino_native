@@ -102,6 +102,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
   private var requestedMinHeight: CGFloat = 44
   private var requestedMaxHeight: CGFloat = 240
   private var maxVisibleLines = 1
+  private var textInputAction = "done"
   private var lastReportedHeight: CGFloat = 0
   private var isDarkAppearance = false
   private var isApplyingProgrammaticText = false
@@ -166,6 +167,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     var minHeight: CGFloat = 44
     var maxHeight: CGFloat = 240
     var maxVisibleLines: Int = 1
+    var textInputAction = "done"
     var focusEnabled: Bool = true
     var isDark: Bool = false
     var tint: NSColor? = nil
@@ -204,6 +206,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
       if let value = dict["minHeight"] as? NSNumber { minHeight = CGFloat(truncating: value) }
       if let value = dict["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
       if let value = dict["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
+      if let value = dict["textInputAction"] as? String { textInputAction = value }
       if let value = dict["focusEnabled"] as? NSNumber { focusEnabled = value.boolValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let behavior = dict["behavior"] as? [String: Any] {
@@ -231,10 +234,14 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
         if let value = behavior["maxVisibleLines"] as? NSNumber {
           maxVisibleLines = value.intValue
         }
+        if let value = behavior["textInputAction"] as? String {
+          textInputAction = value
+        }
       }
       if let layout = dict["layout"] as? [String: Any] {
         if let value = layout["height"] as? NSNumber { minHeight = CGFloat(truncating: value) }
         if let value = layout["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
+        if let value = layout["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
         if let value = layout["borderRadius"] as? NSNumber { borderRadius = CGFloat(truncating: value) }
         if let value = layout["accessoryButtonSize"] as? NSNumber { accessoryButtonSize = CGFloat(truncating: value) }
         if let value = layout["fieldHorizontalPadding"] as? NSNumber { fieldHorizontalPadding = CGFloat(truncating: value) }
@@ -327,6 +334,7 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     requestedMinHeight = max(28, min(minHeight, maxHeight))
     requestedMaxHeight = max(requestedMinHeight, maxHeight)
     self.maxVisibleLines = max(1, maxVisibleLines)
+    self.textInputAction = textInputAction
     self.leadingAccessoryIcon = leadingIcon
     self.clearButtonIcon = clearIcon
     self.sendButtonIcon = sendIcon
@@ -539,7 +547,8 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 	      "sendButtonVisibility": self.sendButtonVisibilityRule,
 	      "trailingActionsVisibility": self.trailingActionsVisibilityRule,
 	      "trailingAccessoryOrder": self.trailingAccessoryOrder,
-	      "maxVisibleLines": self.maxVisibleLines
+	      "maxVisibleLines": self.maxVisibleLines,
+        "textInputAction": self.textInputAction
 	    ])
 	    applyFocusEnabled(focusEnabled)
 	    applyEnabled(enabled)
@@ -764,6 +773,20 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     channel.invokeMethod("focusChanged", arguments: ["focused": false])
   }
 
+  func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+    guard controlEnabled && focusEnabled else { return true }
+    guard shouldTreatReturnAsSubmission() else { return false }
+    switch commandSelector {
+    case #selector(NSResponder.insertNewline(_:)),
+         #selector(NSResponder.insertLineBreak(_:)),
+         #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+      submitCurrentText()
+      return true
+    default:
+      return false
+    }
+  }
+
   @objc private func onClearPressed() {
     guard controlEnabled else { return }
     applyText("")
@@ -855,12 +878,12 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
   @objc private func onSearchPressed() {
     guard controlEnabled && showsLeadingAccessory && leadingAccessoryTriggersSubmit else { return }
-    channel.invokeMethod("submitted", arguments: ["text": textView.string])
+    submitCurrentText()
   }
 
   @objc private func onSendPressed() {
     guard controlEnabled, !textView.string.isEmpty else { return }
-    channel.invokeMethod("submitted", arguments: ["text": textView.string])
+    submitCurrentText()
   }
 
   @objc private func onCancelPressed() {
@@ -997,6 +1020,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     if let value = params["maxVisibleLines"] as? NSNumber {
       maxVisibleLines = max(1, value.intValue)
     }
+    if let value = params["textInputAction"] as? String {
+      textInputAction = value
+    }
     if trailingActionsVisibilityRule == "whileEmptyBeforeInteractionOrFocused" &&
         previousTrailingRule != trailingActionsVisibilityRule {
       hasInteractedWithField = false
@@ -1049,6 +1075,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     }
     if let value = params["maxHeight"] as? NSNumber {
       maxHeight = CGFloat(truncating: value)
+    }
+    if let value = params["maxVisibleLines"] as? NSNumber {
+      maxVisibleLines = max(1, value.intValue)
     }
     if let value = params["borderRadius"] as? NSNumber {
       fieldCornerRadius = CGFloat(truncating: value)
@@ -1207,6 +1236,19 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
 
   private func themedPlaceholderColor() -> NSColor {
     return NSColor.labelColor.withAlphaComponent(isDarkAppearance ? 0.44 : 0.34)
+  }
+
+  private func shouldTreatReturnAsSubmission() -> Bool {
+    switch textInputAction {
+    case "newline", "none":
+      return false
+    default:
+      return true
+    }
+  }
+
+  private func submitCurrentText() {
+    channel.invokeMethod("submitted", arguments: ["text": textView.string])
   }
 
   private func updateTrailingAccessoryAlignment(

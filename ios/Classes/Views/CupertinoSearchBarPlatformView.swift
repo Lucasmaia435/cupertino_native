@@ -91,6 +91,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private var requestedMinHeight: CGFloat = 44
   private var requestedMaxHeight: CGFloat = 240
   private var maxVisibleLines = 1
+  private var textInputAction = "done"
   private var lastReportedHeight: CGFloat = 0
   private var isDarkAppearance = false
   private var isApplyingProgrammaticText = false
@@ -188,6 +189,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 	    var minHeight: CGFloat = 44
 	    var maxHeight: CGFloat = 240
 	    var maxVisibleLines: Int = 1
+      var textInputAction = "done"
 	    var focusEnabled: Bool = true
 	    var isDark: Bool = false
       var hasExplicitBrightnessOverride = false
@@ -227,6 +229,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       if let value = dict["minHeight"] as? NSNumber { minHeight = CGFloat(truncating: value) }
 	      if let value = dict["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
 	      if let value = dict["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
+        if let value = dict["textInputAction"] as? String { textInputAction = value }
 	      if let value = dict["focusEnabled"] as? NSNumber { focusEnabled = value.boolValue }
 	      if let value = dict["isDark"] as? NSNumber {
           isDark = value.boolValue
@@ -257,10 +260,14 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 	        if let value = behavior["maxVisibleLines"] as? NSNumber {
 	          maxVisibleLines = value.intValue
 	        }
+          if let value = behavior["textInputAction"] as? String {
+            textInputAction = value
+          }
 	      }
 	      if let layout = dict["layout"] as? [String: Any] {
 	        if let value = layout["height"] as? NSNumber { minHeight = CGFloat(truncating: value) }
 	        if let value = layout["maxHeight"] as? NSNumber { maxHeight = CGFloat(truncating: value) }
+          if let value = layout["maxVisibleLines"] as? NSNumber { maxVisibleLines = value.intValue }
 	        if let value = layout["borderRadius"] as? NSNumber { borderRadius = CGFloat(truncating: value) }
 	        if let value = layout["accessoryButtonSize"] as? NSNumber { accessoryButtonSize = CGFloat(truncating: value) }
 	        if let value = layout["fieldHorizontalPadding"] as? NSNumber { fieldHorizontalPadding = CGFloat(truncating: value) }
@@ -355,6 +362,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 	    requestedMinHeight = max(36, min(minHeight, maxHeight))
 	    requestedMaxHeight = max(requestedMinHeight, maxHeight)
 	    self.maxVisibleLines = max(1, maxVisibleLines)
+      self.textInputAction = textInputAction
 	    self.leadingAccessoryIcon = leadingIcon
 	    self.clearButtonIcon = clearIcon
 	    self.sendButtonIcon = sendIcon
@@ -412,6 +420,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     textView.alwaysBounceVertical = false
     textView.keyboardDismissMode = .interactive
     textView.textContainer.lineFragmentPadding = 0
+    applyReturnKeyConfiguration()
     applyTextInsets()
 
     placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -580,7 +589,8 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 	      "sendButtonVisibility": self.sendButtonVisibilityRule,
 	      "trailingActionsVisibility": self.trailingActionsVisibilityRule,
 	      "trailingAccessoryOrder": self.trailingAccessoryOrder,
-	      "maxVisibleLines": self.maxVisibleLines
+	      "maxVisibleLines": self.maxVisibleLines,
+        "textInputAction": self.textInputAction
 	    ])
 	    applyFocusEnabled(focusEnabled)
 	    applyEnabled(enabled)
@@ -804,6 +814,19 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     channel.invokeMethod("focusChanged", arguments: ["focused": false])
   }
 
+  func textView(
+    _ textView: UITextView,
+    shouldChangeTextIn range: NSRange,
+    replacementText text: String
+  ) -> Bool {
+    guard controlEnabled && focusEnabled else { return false }
+    guard textView.markedTextRange == nil else { return true }
+    guard shouldTreatReturnAsSubmission() else { return true }
+    guard text == "\n" || text == "\r" || text == "\r\n" else { return true }
+    submitCurrentText()
+    return false
+  }
+
   @objc private func onClearPressed() {
     guard controlEnabled else { return }
     applyText("")
@@ -855,14 +878,14 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   @objc private func onSearchPressed() {
     guard controlEnabled && showsLeadingAccessory && leadingAccessoryTriggersSubmit else { return }
-    channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
+    submitCurrentText()
   }
 
   @objc private func onSendPressed() {
     guard controlEnabled, let text = textView.text, !text.isEmpty else {
       return
     }
-    channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
+    submitCurrentText()
   }
 
   @discardableResult
@@ -1000,10 +1023,14 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     if let value = params["maxVisibleLines"] as? NSNumber {
       maxVisibleLines = max(1, value.intValue)
     }
+    if let value = params["textInputAction"] as? String {
+      textInputAction = value
+    }
     if trailingActionsVisibilityRule == "whileEmptyBeforeInteractionOrFocused" &&
         previousTrailingRule != trailingActionsVisibilityRule {
       hasInteractedWithField = false
     }
+    applyReturnKeyConfiguration()
     leadingSearchWidthConstraint.constant = currentLeadingAccessoryWidth()
     applyShowsCancelButton(showsCancelButton)
     updateTrailingAccessoryAlignment()
@@ -1043,6 +1070,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     }
     if let value = params["maxHeight"] as? NSNumber {
       maxHeight = CGFloat(truncating: value)
+    }
+    if let value = params["maxVisibleLines"] as? NSNumber {
+      maxVisibleLines = max(1, value.intValue)
     }
     if let value = params["borderRadius"] as? NSNumber {
       fieldCornerRadius = CGFloat(truncating: value)
@@ -1215,6 +1245,54 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   private func themedPlaceholderColor() -> UIColor {
     return UIColor.label.withAlphaComponent(isDarkAppearance ? 0.44 : 0.34)
+  }
+
+  private func applyReturnKeyConfiguration() {
+    textView.returnKeyType = resolvedReturnKeyType()
+    if textView.isFirstResponder {
+      textView.reloadInputViews()
+    }
+  }
+
+  private func resolvedReturnKeyType() -> UIReturnKeyType {
+    switch textInputAction {
+    case "done":
+      return .done
+    case "go":
+      return .go
+    case "search":
+      return .search
+    case "send":
+      return .send
+    case "next":
+      return .next
+    case "join":
+      return .join
+    case "route":
+      return .route
+    case "emergencyCall":
+      return .emergencyCall
+    case "continue":
+      if #available(iOS 9.0, *) {
+        return .continue
+      }
+      return .default
+    default:
+      return .default
+    }
+  }
+
+  private func shouldTreatReturnAsSubmission() -> Bool {
+    switch textInputAction {
+    case "newline", "none":
+      return false
+    default:
+      return true
+    }
+  }
+
+  private func submitCurrentText() {
+    channel.invokeMethod("submitted", arguments: ["text": textView.text ?? ""])
   }
 
   private func applyTextInsets() {

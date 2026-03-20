@@ -52,15 +52,7 @@ class CNTextFieldLayout {
 /// Visual styling for [CNTextField].
 class CNTextFieldStyle {
   /// Creates a style configuration.
-  const CNTextFieldStyle({
-    this.tint,
-    this.backgroundColor,
-    this.fieldBackgroundColor,
-    this.fieldOverlayColor,
-    this.fieldBorderColor,
-    this.placeholderColor,
-    this.disabledOpacity = 0.6,
-  });
+  const CNTextFieldStyle({this.tint, this.backgroundColor, this.fieldBackgroundColor, this.fieldOverlayColor, this.fieldBorderColor, this.placeholderColor, this.disabledOpacity = 0.6});
 
   /// Accent/tint color.
   final Color? tint;
@@ -113,9 +105,11 @@ class CNTextField extends StatefulWidget {
     this.trailing = const [],
     this.layout = const CNTextFieldLayout(),
     this.style = const CNTextFieldStyle(),
-    this.textInputAction = TextInputAction.done,
+    TextInputAction? textInputAction,
     this.keyboardType = TextInputType.text,
-  });
+    this.padding = EdgeInsets.zero,
+    this.shrinkWrap = false,
+  }) : _textInputAction = textInputAction;
 
   /// Current text displayed by the field.
   final String text;
@@ -156,18 +150,27 @@ class CNTextField extends StatefulWidget {
   /// Visual styling configuration for the field.
   final CNTextFieldStyle style;
 
-  /// Fallback text input action used on non-native platforms.
-  final TextInputAction textInputAction;
+  /// Preferred text input action.
+  ///
+  /// When omitted, multiline layouts default to [TextInputAction.newline] and
+  /// single-line layouts default to [TextInputAction.done].
+  TextInputAction get textInputAction => _textInputAction ?? (math.max(1, layout.maxVisibleLines) > 1 ? TextInputAction.newline : TextInputAction.done);
+  final TextInputAction? _textInputAction;
 
   /// Fallback keyboard type used on non-native platforms.
   final TextInputType keyboardType;
+
+  /// Outer padding applied around the native text field.
+  final EdgeInsetsGeometry padding;
+
+  /// Whether the field should size itself to its visible content width.
+  final bool shrinkWrap;
 
   @override
   State<CNTextField> createState() => _CNTextFieldState();
 }
 
-class _CNTextFieldState extends State<CNTextField>
-    with CNPlatformViewModalVisibility<CNTextField> {
+class _CNTextFieldState extends State<CNTextField> with CNPlatformViewModalVisibility<CNTextField> {
   MethodChannel? _channel;
   late final TextEditingController _fallbackController;
   late final FocusNode _fallbackFocusNode;
@@ -196,8 +199,7 @@ class _CNTextFieldState extends State<CNTextField>
   String? _lastLayoutSignature;
   String? _lastStyleSignature;
 
-  TextEditingController get _textController =>
-      widget.controller ?? _fallbackController;
+  TextEditingController get _textController => widget.controller ?? _fallbackController;
 
   FocusNode get _focusNode => widget.focusNode ?? _fallbackFocusNode;
 
@@ -207,105 +209,98 @@ class _CNTextFieldState extends State<CNTextField>
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
 
-  bool get _isNativePlatform =>
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.macOS;
+  bool get _isNativePlatform => defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
   MethodChannel? get visibilityChannel => _channel;
 
-  bool get _canInteractWithTextInput =>
-      widget.enabled && _focusNode.canRequestFocus;
+  bool get _canInteractWithTextInput => widget.enabled && _focusNode.canRequestFocus;
 
-  Color get _effectiveTint =>
-      _style.tint ?? CupertinoTheme.of(context).primaryColor;
+  Color get _effectiveTint => _style.tint ?? CupertinoTheme.of(context).primaryColor;
 
-  Color? get _effectiveFieldBackgroundColor =>
-      _style.fieldBackgroundColor ?? _style.backgroundColor;
+  Color? get _effectiveFieldBackgroundColor => _style.fieldBackgroundColor ?? _style.backgroundColor;
 
-  double get _configuredMaxHeight =>
-      math.max(_layout.height, _layout.maxHeight);
+  double get _configuredMaxHeight => math.max(_layout.height, _layout.maxHeight);
 
   double get _minimumHeight {
     final min = defaultTargetPlatform == TargetPlatform.macOS ? 28.0 : 36.0;
     return _layout.height.clamp(min, _configuredMaxHeight).toDouble();
   }
 
-  double get _effectiveNativeHeight => (_reportedNativeHeight ?? _minimumHeight)
-      .clamp(_minimumHeight, _configuredMaxHeight)
-      .toDouble();
+  double get _effectiveNativeHeight => (_reportedNativeHeight ?? _minimumHeight).clamp(_minimumHeight, _configuredMaxHeight).toDouble();
 
   int get _effectiveMaxVisibleLines => math.max(1, _layout.maxVisibleLines);
+
+  TextInputAction get _effectiveTextInputAction => widget.textInputAction;
 
   bool get _hasLeadingAccessory => widget.leading != null;
 
   bool get _hasTrailingAccessories => widget.trailing.isNotEmpty;
 
-  double get _leadingReservedWidth =>
-      _hasLeadingAccessory ? _leadingWidth + _layout.accessoryGap : 0.0;
+  double get _leadingReservedWidth => _hasLeadingAccessory ? _leadingWidth + _layout.accessoryGap : 0.0;
 
-  double get _trailingReservedWidth =>
-      _hasTrailingAccessories ? _trailingWidth + _layout.accessoryGap : 0.0;
+  double get _trailingReservedWidth => _hasTrailingAccessories ? _trailingWidth + _layout.accessoryGap : 0.0;
 
   double _resolvedLineHeight(BuildContext context) {
     final themeTextStyle = CupertinoTheme.of(context).textTheme.textStyle;
-    final defaultFontSize = defaultTargetPlatform == TargetPlatform.macOS
-        ? 16.0
-        : 17.0;
+    final defaultFontSize = defaultTargetPlatform == TargetPlatform.macOS ? 16.0 : 17.0;
     final fontSize = themeTextStyle.fontSize ?? defaultFontSize;
     return fontSize * (themeTextStyle.height ?? 1.25);
   }
 
+  TextStyle _resolvedTextStyle(BuildContext context) {
+    final themeTextStyle = CupertinoTheme.of(context).textTheme.textStyle;
+    final defaultFontSize = defaultTargetPlatform == TargetPlatform.macOS ? 16.0 : 17.0;
+    return themeTextStyle.copyWith(fontSize: themeTextStyle.fontSize ?? defaultFontSize, height: themeTextStyle.height ?? 1.25);
+  }
+
   double _resolvedTextVerticalPadding(BuildContext context) {
     final lineHeight = _resolvedLineHeight(context);
-    return math.max(
-      _layout.fieldVerticalPadding,
-      (_minimumHeight - lineHeight) / 2,
-    );
+    return math.max(_layout.fieldVerticalPadding, (_minimumHeight - lineHeight) / 2);
   }
 
   double _resolvedTextBottomPadding(BuildContext context) {
     final effectiveTextVerticalPadding = _resolvedTextVerticalPadding(context);
-    return math.max(
-      0.0,
-      effectiveTextVerticalPadding - _layout.textOpticalVerticalOffset,
-    );
+    return math.max(0.0, effectiveTextVerticalPadding - _layout.textOpticalVerticalOffset);
   }
 
-  double _accessoryLastLineTop(
-    BuildContext context,
-    double fieldHeight, {
-    required double accessoryHeight,
-  }) {
+  double _accessoryLastLineTop(BuildContext context, double fieldHeight, {required double accessoryHeight}) {
     const accessoryOpticalLift = 2.0;
     final bottomPadding = _resolvedTextBottomPadding(context);
     final lastLineBottom = fieldHeight - bottomPadding;
-    final resolvedAccessoryHeight = accessoryHeight > 0
-        ? accessoryHeight
-        : _resolvedLineHeight(context);
-    return math.max(
-      0.0,
-      lastLineBottom - resolvedAccessoryHeight - accessoryOpticalLift,
-    );
+    final resolvedAccessoryHeight = accessoryHeight > 0 ? accessoryHeight : _resolvedLineHeight(context);
+    return math.max(0.0, lastLineBottom - resolvedAccessoryHeight - accessoryOpticalLift);
   }
 
   double _leadingTextTop(BuildContext context) {
     final lineHeight = _resolvedLineHeight(context);
-    final resolvedLeadingHeight = _leadingHeight > 0
-        ? _leadingHeight
-        : lineHeight;
-    final textTop =
-        _resolvedTextVerticalPadding(context) +
-        _layout.textOpticalVerticalOffset;
+    final resolvedLeadingHeight = _leadingHeight > 0 ? _leadingHeight : lineHeight;
+    final textTop = _resolvedTextVerticalPadding(context) + _layout.textOpticalVerticalOffset;
     return math.max(0.0, textTop + ((lineHeight - resolvedLeadingHeight) / 2));
   }
 
   double _trailingLastLineTop(BuildContext context, double fieldHeight) {
-    return _accessoryLastLineTop(
-      context,
-      fieldHeight,
-      accessoryHeight: _trailingHeight,
-    );
+    return _accessoryLastLineTop(context, fieldHeight, accessoryHeight: _trailingHeight);
+  }
+
+  double _measureTextWidth(BuildContext context, String text) {
+    if (text.isEmpty) return 0;
+    final painter = TextPainter(textDirection: Directionality.of(context), maxLines: 1);
+    var maxWidth = 0.0;
+    for (final line in text.split('\n')) {
+      painter.text = TextSpan(text: line, style: _resolvedTextStyle(context));
+      painter.layout();
+      maxWidth = math.max(maxWidth, painter.width);
+    }
+    return maxWidth;
+  }
+
+  double _shrinkWrapWidth(BuildContext context) {
+    const textBreathingRoom = 2.0;
+    final displayText = _textController.text.isNotEmpty ? _textController.text : (widget.placeholder ?? '');
+    final contentWidth = _measureTextWidth(context, displayText) + textBreathingRoom;
+    final resolvedWidth = (_layout.fieldHorizontalPadding * 2) + _leadingReservedWidth + _trailingReservedWidth + contentWidth;
+    return math.max(_minimumHeight, resolvedWidth);
   }
 
   void _handleExpandedTapAreaTap() {
@@ -424,8 +419,7 @@ class _CNTextFieldState extends State<CNTextField>
     );
   }
 
-  int _clampSelectionOffset(int offset, int textLength) =>
-      offset.clamp(0, textLength);
+  int _clampSelectionOffset(int offset, int textLength) => offset.clamp(0, textLength);
 
   TextSelection _selectionForText(String text, {TextSelection? selection}) {
     final source = selection ?? _textController.selection;
@@ -434,12 +428,7 @@ class _CNTextFieldState extends State<CNTextField>
       return TextSelection.collapsed(offset: textLength);
     }
 
-    return TextSelection(
-      baseOffset: _clampSelectionOffset(source.baseOffset, textLength),
-      extentOffset: _clampSelectionOffset(source.extentOffset, textLength),
-      affinity: source.affinity,
-      isDirectional: source.isDirectional,
-    );
+    return TextSelection(baseOffset: _clampSelectionOffset(source.baseOffset, textLength), extentOffset: _clampSelectionOffset(source.extentOffset, textLength), affinity: source.affinity, isDirectional: source.isDirectional);
   }
 
   String _selectionSignature(TextSelection selection) {
@@ -455,10 +444,7 @@ class _CNTextFieldState extends State<CNTextField>
 
     return _selectionForText(
       text,
-      selection: TextSelection(
-        baseOffset: baseOffset,
-        extentOffset: extentOffset,
-      ),
+      selection: TextSelection(baseOffset: baseOffset, extentOffset: extentOffset),
     );
   }
 
@@ -467,19 +453,14 @@ class _CNTextFieldState extends State<CNTextField>
     final currentSelection = _selectionForText(_textController.text);
     final currentSelectionSignature = _selectionSignature(currentSelection);
     final nextSelectionSignature = _selectionSignature(effectiveSelection);
-    if (_textController.text == text &&
-        currentSelectionSignature == nextSelectionSignature) {
+    if (_textController.text == text && currentSelectionSignature == nextSelectionSignature) {
       _lastText = text;
       _lastSelectionSignature = nextSelectionSignature;
       return;
     }
 
     _isApplyingNativeTextChange = true;
-    _textController.value = TextEditingValue(
-      text: text,
-      selection: effectiveSelection,
-      composing: TextRange.empty,
-    );
+    _textController.value = TextEditingValue(text: text, selection: effectiveSelection, composing: TextRange.empty);
     _isApplyingNativeTextChange = false;
     _lastText = text;
     _lastSelectionSignature = nextSelectionSignature;
@@ -509,9 +490,7 @@ class _CNTextFieldState extends State<CNTextField>
   }
 
   void _applyNativeHeight(double height) {
-    final resolved = height
-        .clamp(_minimumHeight, _configuredMaxHeight)
-        .toDouble();
+    final resolved = height.clamp(_minimumHeight, _configuredMaxHeight).toDouble();
     if (!mounted) return;
 
     final currentReportedHeight = _reportedNativeHeight ?? _minimumHeight;
@@ -520,8 +499,7 @@ class _CNTextFieldState extends State<CNTextField>
     if (pendingHeight != null && (pendingHeight - resolved).abs() < 0.5) {
       return;
     }
-    if (pendingHeight == null &&
-        (currentReportedHeight - resolved).abs() < 0.5) {
+    if (pendingHeight == null && (currentReportedHeight - resolved).abs() < 0.5) {
       return;
     }
 
@@ -569,10 +547,7 @@ class _CNTextFieldState extends State<CNTextField>
     }
 
     if (_lastSelectionSignature != selectionSignature) {
-      await channel.invokeMethod('setSelection', {
-        'baseOffset': selection.baseOffset,
-        'extentOffset': selection.extentOffset,
-      });
+      await channel.invokeMethod('setSelection', {'baseOffset': selection.baseOffset, 'extentOffset': selection.extentOffset});
       _lastSelectionSignature = selectionSignature;
     }
   }
@@ -599,12 +574,39 @@ class _CNTextFieldState extends State<CNTextField>
   Color _resolvedPlaceholderColor(BuildContext context) {
     final explicit = _resolveDynamicColor(_style.placeholderColor);
     if (explicit != null) return explicit;
-    final base = CupertinoDynamicColor.resolve(
-      CupertinoTheme.of(context).textTheme.textStyle.color ??
-          CupertinoColors.label,
-      context,
-    );
+    final base = CupertinoDynamicColor.resolve(CupertinoTheme.of(context).textTheme.textStyle.color ?? CupertinoColors.label, context);
     return base.withValues(alpha: _isDark ? 0.44 : 0.34);
+  }
+
+  String _encodeTextInputAction() {
+    switch (_effectiveTextInputAction) {
+      case TextInputAction.none:
+        return 'none';
+      case TextInputAction.unspecified:
+        return 'unspecified';
+      case TextInputAction.done:
+        return 'done';
+      case TextInputAction.go:
+        return 'go';
+      case TextInputAction.search:
+        return 'search';
+      case TextInputAction.send:
+        return 'send';
+      case TextInputAction.next:
+        return 'next';
+      case TextInputAction.previous:
+        return 'previous';
+      case TextInputAction.continueAction:
+        return 'continue';
+      case TextInputAction.join:
+        return 'join';
+      case TextInputAction.route:
+        return 'route';
+      case TextInputAction.emergencyCall:
+        return 'emergencyCall';
+      case TextInputAction.newline:
+        return 'newline';
+    }
   }
 
   Map<String, dynamic> _encodeBehavior() {
@@ -617,6 +619,7 @@ class _CNTextFieldState extends State<CNTextField>
       'trailingActionsVisibility': 'never',
       'trailingAccessoryOrder': const <String>[],
       'maxVisibleLines': _effectiveMaxVisibleLines,
+      'textInputAction': _encodeTextInputAction(),
     };
   }
 
@@ -624,6 +627,7 @@ class _CNTextFieldState extends State<CNTextField>
     return <String, dynamic>{
       'height': _layout.height,
       'maxHeight': _layout.maxHeight,
+      'maxVisibleLines': _effectiveMaxVisibleLines,
       'borderRadius': _layout.borderRadius,
       'fieldHorizontalPadding': _layout.fieldHorizontalPadding,
       'fieldVerticalPadding': _layout.fieldVerticalPadding,
@@ -636,14 +640,8 @@ class _CNTextFieldState extends State<CNTextField>
   Map<String, dynamic> _encodeStyle() {
     return encodeStyle(context, tint: _effectiveTint)..addAll(<String, dynamic>{
       'backgroundColor': resolveColorToArgb(_style.backgroundColor, context),
-      'fieldBackgroundColor': resolveColorToArgb(
-        _style.fieldBackgroundColor,
-        context,
-      ),
-      'fieldOverlayColor': resolveColorToArgb(
-        _style.fieldOverlayColor,
-        context,
-      ),
+      'fieldBackgroundColor': resolveColorToArgb(_style.fieldBackgroundColor, context),
+      'fieldOverlayColor': resolveColorToArgb(_style.fieldOverlayColor, context),
       'fieldBorderColor': resolveColorToArgb(_style.fieldBorderColor, context),
       'placeholderColor': resolveColorToArgb(_style.placeholderColor, context),
       'disabledOpacity': _style.disabledOpacity,
@@ -652,9 +650,7 @@ class _CNTextFieldState extends State<CNTextField>
 
   void _cacheCurrentProps() {
     _lastText = _textController.text;
-    _lastSelectionSignature = _selectionSignature(
-      _selectionForText(_textController.text),
-    );
+    _lastSelectionSignature = _selectionSignature(_selectionForText(_textController.text));
     _lastPlaceholder = widget.placeholder;
     _lastEnabled = widget.enabled;
     _lastIsDark = _isDark;
@@ -678,9 +674,7 @@ class _CNTextFieldState extends State<CNTextField>
     await _syncEditingStateToNativeIfNeeded(channel);
 
     if (_lastPlaceholder != placeholder) {
-      await channel.invokeMethod('setPlaceholder', {
-        'placeholder': placeholder,
-      });
+      await channel.invokeMethod('setPlaceholder', {'placeholder': placeholder});
       _lastPlaceholder = placeholder;
     }
 
@@ -690,9 +684,7 @@ class _CNTextFieldState extends State<CNTextField>
     }
 
     if (_lastBehaviorSignature != behaviorSignature) {
-      await channel.invokeMethod('setBehavior', {
-        'behavior': _encodeBehavior(),
-      });
+      await channel.invokeMethod('setBehavior', {'behavior': _encodeBehavior()});
       _lastBehaviorSignature = behaviorSignature;
     }
 
@@ -712,9 +704,7 @@ class _CNTextFieldState extends State<CNTextField>
     }
 
     if (_lastFocusEnabled != focusEnabled) {
-      await channel.invokeMethod('setFocusEnabled', {
-        'focusEnabled': focusEnabled,
-      });
+      await channel.invokeMethod('setFocusEnabled', {'focusEnabled': focusEnabled});
       _lastFocusEnabled = focusEnabled;
       if (!focusEnabled) {
         await channel.invokeMethod('unfocus');
@@ -765,10 +755,7 @@ class _CNTextFieldState extends State<CNTextField>
         }
         break;
       case 'selectionChanged':
-        _applyNativeSelection(
-          _parseNativeSelection(args, _textController.text) ??
-              _selectionForText(_textController.text),
-        );
+        _applyNativeSelection(_parseNativeSelection(args, _textController.text) ?? _selectionForText(_textController.text));
         break;
       case 'heightChanged':
         final height = (args?['height'] as num?)?.toDouble();
@@ -809,8 +796,7 @@ class _CNTextFieldState extends State<CNTextField>
   void _updateTrailingSize(Size size) {
     final width = size.width;
     final height = size.height;
-    if ((_trailingWidth - width).abs() < 0.5 &&
-        (_trailingHeight - height).abs() < 0.5) {
+    if ((_trailingWidth - width).abs() < 0.5 && (_trailingHeight - height).abs() < 0.5) {
       return;
     }
     setState(() {
@@ -832,7 +818,11 @@ class _CNTextFieldState extends State<CNTextField>
   @override
   Widget build(BuildContext context) {
     if (!_isNativePlatform) {
-      return _buildFallback(context);
+      final fallbackField = _buildFallback(context);
+      return Padding(
+        padding: widget.padding,
+        child: widget.shrinkWrap ? SizedBox(width: _shrinkWrapWidth(context), child: fallbackField) : fallbackField,
+      );
     }
 
     trackPlatformViewModalVisibility();
@@ -857,20 +847,10 @@ class _CNTextFieldState extends State<CNTextField>
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
-        ? UiKitView(
-            viewType: 'CupertinoNativeSearchBar',
-            creationParamsCodec: const StandardMessageCodec(),
-            creationParams: creationParams,
-            onPlatformViewCreated: _onPlatformViewCreated,
-          )
-        : AppKitView(
-            viewType: 'CupertinoNativeSearchBar',
-            creationParamsCodec: const StandardMessageCodec(),
-            creationParams: creationParams,
-            onPlatformViewCreated: _onPlatformViewCreated,
-          );
+        ? UiKitView(viewType: 'CupertinoNativeSearchBar', creationParamsCodec: const StandardMessageCodec(), creationParams: creationParams, onPlatformViewCreated: _onPlatformViewCreated)
+        : AppKitView(viewType: 'CupertinoNativeSearchBar', creationParamsCodec: const StandardMessageCodec(), creationParams: creationParams, onPlatformViewCreated: _onPlatformViewCreated);
 
-    return Focus(
+    final field = Focus(
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       includeSemantics: false,
@@ -884,6 +864,10 @@ class _CNTextFieldState extends State<CNTextField>
           child: _buildFieldOverlay(context, child: platformView),
         ),
       ),
+    );
+    return Padding(
+      padding: widget.padding,
+      child: widget.shrinkWrap ? SizedBox(width: _shrinkWrapWidth(context), child: field) : field,
     );
   }
 
@@ -911,19 +895,13 @@ class _CNTextFieldState extends State<CNTextField>
                   bottom: 0,
                   start: 0,
                   end: 0,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: _handleExpandedTapAreaTap,
-                  ),
+                  child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _handleExpandedTapAreaTap),
                 ),
               if (leading != null)
                 PositionedDirectional(
                   start: leadingInset,
                   top: leadingTop,
-                  child: _SizeObserver(
-                    onSize: _updateLeadingSize,
-                    child: leading,
-                  ),
+                  child: _SizeObserver(onSize: _updateLeadingSize, child: leading),
                 ),
               if (trailing.isNotEmpty)
                 PositionedDirectional(
@@ -931,11 +909,7 @@ class _CNTextFieldState extends State<CNTextField>
                   top: trailingTop,
                   child: _SizeObserver(
                     onSize: _updateTrailingSize,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: trailing,
-                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: trailing),
                   ),
                 ),
             ],
@@ -948,8 +922,7 @@ class _CNTextFieldState extends State<CNTextField>
   Widget _buildFallback(BuildContext context) {
     final theme = CupertinoTheme.of(context);
     final effectiveTint = _effectiveTint;
-    final canInteractWithTextInput =
-        widget.enabled && _focusNode.canRequestFocus;
+    final canInteractWithTextInput = widget.enabled && _focusNode.canRequestFocus;
 
     if (!canInteractWithTextInput && _focusNode.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -959,73 +932,32 @@ class _CNTextFieldState extends State<CNTextField>
       });
     }
 
-    final resolvedFieldBackground =
-        _resolveDynamicColor(
-          _effectiveFieldBackgroundColor ??
-              _style.fieldOverlayColor ??
-              CupertinoColors.systemGrey5,
-        ) ??
-        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
-    final resolvedFieldOverlayColor = _resolveDynamicColor(
-      _style.fieldOverlayColor,
-    );
-    final resolvedFieldBorderColor = _resolveDynamicColor(
-      _style.fieldBorderColor,
-    );
+    final resolvedFieldBackground = _resolveDynamicColor(_effectiveFieldBackgroundColor ?? _style.fieldOverlayColor ?? CupertinoColors.systemGrey5) ?? CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    final resolvedFieldOverlayColor = _resolveDynamicColor(_style.fieldOverlayColor);
+    final resolvedFieldBorderColor = _resolveDynamicColor(_style.fieldBorderColor);
     final resolvedPlaceholderColor = _resolvedPlaceholderColor(context);
     final resolvedDisabledOpacity = _style.disabledOpacity.clamp(0.0, 1.0);
 
-    final textStyle = theme.textTheme.textStyle.copyWith(
-      fontSize: 17,
-      height: 1.25,
-    );
-    final strutStyle = StrutStyle(
-      fontSize: textStyle.fontSize,
-      height: textStyle.height,
-      forceStrutHeight: true,
-    );
+    final textStyle = theme.textTheme.textStyle.copyWith(fontSize: 17, height: 1.25);
+    final strutStyle = StrutStyle(fontSize: textStyle.fontSize, height: textStyle.height, forceStrutHeight: true);
     final lineHeight = _resolvedLineHeight(context);
     final effectiveTextVerticalPadding = _resolvedTextVerticalPadding(context);
-    final effectiveTextTopPadding =
-        effectiveTextVerticalPadding + _layout.textOpticalVerticalOffset;
+    final effectiveTextTopPadding = effectiveTextVerticalPadding + _layout.textOpticalVerticalOffset;
     final effectiveTextBottomPadding = _resolvedTextBottomPadding(context);
-    final minFieldHeight = math
-        .max(
-          36.0,
-          math.max(
-            _layout.height,
-            _fieldHeightForLines(lineHeight, 1, effectiveTextVerticalPadding),
-          ),
-        )
-        .toDouble();
-    final maxFieldHeight = math
-        .max(
-          minFieldHeight,
-          _fieldHeightForLines(
-            lineHeight,
-            _effectiveMaxVisibleLines,
-            effectiveTextVerticalPadding,
-          ),
-        )
-        .toDouble();
+    final minFieldHeight = math.max(36.0, math.max(_layout.height, _fieldHeightForLines(lineHeight, 1, effectiveTextVerticalPadding))).toDouble();
+    final maxFieldHeight = math.max(minFieldHeight, _fieldHeightForLines(lineHeight, _effectiveMaxVisibleLines, effectiveTextVerticalPadding)).toDouble();
 
     Widget content = AnimatedSize(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
       alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: minFieldHeight,
-          maxHeight: maxFieldHeight,
-        ),
+        constraints: BoxConstraints(minHeight: minFieldHeight, maxHeight: maxFieldHeight),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(_layout.borderRadius),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final fieldHeight =
-                  (_reportedFallbackFieldHeight ?? minFieldHeight)
-                      .clamp(minFieldHeight, maxFieldHeight)
-                      .toDouble();
+              final fieldHeight = (_reportedFallbackFieldHeight ?? minFieldHeight).clamp(minFieldHeight, maxFieldHeight).toDouble();
               final leadingTop = _leadingTextTop(context);
               final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
@@ -1037,31 +969,20 @@ class _CNTextFieldState extends State<CNTextField>
                     DecoratedBox(
                       decoration: BoxDecoration(
                         color: resolvedFieldBackground,
-                        borderRadius: BorderRadius.circular(
-                          _layout.borderRadius,
-                        ),
-                        border: resolvedFieldBorderColor == null
-                            ? null
-                            : Border.all(color: resolvedFieldBorderColor),
+                        borderRadius: BorderRadius.circular(_layout.borderRadius),
+                        border: resolvedFieldBorderColor == null ? null : Border.all(color: resolvedFieldBorderColor),
                       ),
                     ),
                     if (resolvedFieldOverlayColor != null)
                       IgnorePointer(
                         child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: resolvedFieldOverlayColor,
-                            borderRadius: BorderRadius.circular(
-                              _layout.borderRadius,
-                            ),
-                          ),
+                          decoration: BoxDecoration(color: resolvedFieldOverlayColor, borderRadius: BorderRadius.circular(_layout.borderRadius)),
                         ),
                       ),
                     CupertinoTheme(
                       data: theme.copyWith(primaryColor: effectiveTint),
                       child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(
-                          context,
-                        ).copyWith(scrollbars: false),
+                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                         child: CupertinoTextField.borderless(
                           controller: _textController,
                           focusNode: _focusNode,
@@ -1069,25 +990,19 @@ class _CNTextFieldState extends State<CNTextField>
                           enabled: widget.enabled,
                           enableInteractiveSelection: canInteractWithTextInput,
                           padding: EdgeInsetsDirectional.only(
-                            start:
-                                _layout.fieldHorizontalPadding +
-                                _leadingReservedWidth,
-                            end:
-                                _layout.fieldHorizontalPadding +
-                                _trailingReservedWidth,
+                            start: _layout.fieldHorizontalPadding + _leadingReservedWidth,
+                            end: _layout.fieldHorizontalPadding + _trailingReservedWidth,
                             top: effectiveTextTopPadding,
                             bottom: effectiveTextBottomPadding,
                           ),
                           minLines: 1,
-                          maxLines: _effectiveMaxVisibleLines == 1 ? 1 : null,
+                          maxLines: _effectiveMaxVisibleLines,
                           keyboardType: widget.keyboardType,
-                          textInputAction: widget.textInputAction,
+                          textInputAction: _effectiveTextInputAction,
                           style: textStyle,
                           strutStyle: strutStyle,
                           placeholder: widget.placeholder,
-                          placeholderStyle: textStyle.copyWith(
-                            color: resolvedPlaceholderColor,
-                          ),
+                          placeholderStyle: textStyle.copyWith(color: resolvedPlaceholderColor),
                           cursorColor: effectiveTint,
                           onTap: widget.onTap,
                           onChanged: widget.onChanged,
@@ -1096,15 +1011,10 @@ class _CNTextFieldState extends State<CNTextField>
                             if (!canInteractWithTextInput) {
                               return const SizedBox.shrink();
                             }
-                            if (defaultTargetPlatform == TargetPlatform.iOS &&
-                                SystemContextMenu.isSupported(context)) {
-                              return SystemContextMenu.editableText(
-                                editableTextState: editableTextState,
-                              );
+                            if (defaultTargetPlatform == TargetPlatform.iOS && SystemContextMenu.isSupported(context)) {
+                              return SystemContextMenu.editableText(editableTextState: editableTextState);
                             }
-                            return CupertinoAdaptiveTextSelectionToolbar.editableText(
-                              editableTextState: editableTextState,
-                            );
+                            return CupertinoAdaptiveTextSelectionToolbar.editableText(editableTextState: editableTextState);
                           },
                         ),
                       ),
@@ -1115,22 +1025,13 @@ class _CNTextFieldState extends State<CNTextField>
                         bottom: 0,
                         start: 0,
                         end: 0,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: _handleExpandedTapAreaTap,
-                        ),
+                        child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _handleExpandedTapAreaTap),
                       ),
                     if (_hasLeadingAccessory)
                       PositionedDirectional(
-                        start: math.max(
-                          0.0,
-                          _layout.fieldHorizontalPadding - 4,
-                        ),
+                        start: math.max(0.0, _layout.fieldHorizontalPadding - 4),
                         top: leadingTop,
-                        child: _SizeObserver(
-                          onSize: _updateLeadingSize,
-                          child: widget.leading!,
-                        ),
+                        child: _SizeObserver(onSize: _updateLeadingSize, child: widget.leading!),
                       ),
                     if (_hasTrailingAccessories)
                       PositionedDirectional(
@@ -1138,11 +1039,7 @@ class _CNTextFieldState extends State<CNTextField>
                         top: trailingTop,
                         child: _SizeObserver(
                           onSize: _updateTrailingSize,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: widget.trailing,
-                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: widget.trailing),
                         ),
                       ),
                   ],
@@ -1154,18 +1051,10 @@ class _CNTextFieldState extends State<CNTextField>
       ),
     );
 
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 180),
-      opacity: widget.enabled ? 1 : resolvedDisabledOpacity,
-      child: content,
-    );
+    return AnimatedOpacity(duration: const Duration(milliseconds: 180), opacity: widget.enabled ? 1 : resolvedDisabledOpacity, child: content);
   }
 
-  double _fieldHeightForLines(
-    double lineHeight,
-    int lines,
-    double verticalPadding,
-  ) {
+  double _fieldHeightForLines(double lineHeight, int lines, double verticalPadding) {
     return lineHeight * lines + (verticalPadding * 2);
   }
 }
@@ -1181,10 +1070,7 @@ class _SizeObserver extends SingleChildRenderObjectWidget {
   }
 
   @override
-  void updateRenderObject(
-    BuildContext context,
-    covariant _RenderSizeObserver renderObject,
-  ) {
+  void updateRenderObject(BuildContext context, covariant _RenderSizeObserver renderObject) {
     renderObject.onSize = onSize;
   }
 }

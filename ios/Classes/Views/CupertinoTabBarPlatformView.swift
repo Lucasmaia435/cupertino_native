@@ -93,9 +93,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       switch call.method {
       case "getIntrinsicSize":
         if let bar = self.tabBar ?? self.tabBarLeft ?? self.tabBarRight {
-          let size = bar.sizeThatFits(
-            CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-          )
+          let size = self.measuredSize(for: bar)
           result(["width": Double(size.width), "height": Double(size.height)])
         } else {
           result(["width": Double(self.container.bounds.width), "height": 50.0])
@@ -239,8 +237,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       container.addSubview(right)
 
       let spacing: CGFloat = splitSpacingVal
-      let leftWidth = left.sizeThatFits(.zero).width + leftInsetVal * 2
-      let rightWidth = right.sizeThatFits(.zero).width + rightInsetVal * 2
+      let leftWidth = measuredSize(for: left).width + leftInsetVal * 2
+      let rightWidth = measuredSize(for: right).width + rightInsetVal * 2
       let total = leftWidth + rightWidth + spacing
       if total > container.bounds.width, count > 0 {
         let rightFraction = CGFloat(rightCountVal) / CGFloat(count)
@@ -297,6 +295,43 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         tabBar.scrollEdgeAppearance = appearance
       }
     }
+  }
+
+  private func measuredSize(for tabBar: UITabBar) -> CGSize {
+    tabBar.setNeedsLayout()
+    tabBar.layoutIfNeeded()
+
+    let fallbackSize = tabBar.sizeThatFits(
+      CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    )
+    let itemControls = tabBar.subviews.compactMap { subview -> UIControl? in
+      guard let control = subview as? UIControl,
+            !control.isHidden,
+            control.alpha > 0,
+            control.bounds.width > 0,
+            control.bounds.height > 0 else {
+        return nil
+      }
+      return control
+    }
+
+    guard !itemControls.isEmpty else {
+      return fallbackSize
+    }
+
+    let contentBounds = itemControls.reduce(into: CGRect.null) { partialResult, control in
+      let frame = tabBar.convert(control.frame, from: control.superview)
+      partialResult = partialResult.union(frame)
+    }
+
+    guard !contentBounds.isNull else {
+      return fallbackSize
+    }
+
+    return CGSize(
+      width: ceil(contentBounds.width),
+      height: max(ceil(contentBounds.height), fallbackSize.height)
+    )
   }
 
   private func applySelection(selectedIndex: Int) {
