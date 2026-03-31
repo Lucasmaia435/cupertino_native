@@ -17,14 +17,21 @@ mixin CNPlatformViewModalVisibility<T extends StatefulWidget> on State<T> {
   @protected
   MethodChannel? get visibilityChannel;
 
-  void _updateDesiredVisibility() {
+  /// Whether the platform view should currently be visible for this route.
+  @protected
+  bool get isPlatformViewVisible => _desiredVisible;
+
+  bool _updateDesiredVisibility() {
     final route = _route;
     final isCurrent = route?.isCurrent ?? true;
     final handlesLocalHistory = route?.willHandlePopInternally ?? false;
     final isInsideBottomSheet =
         context.findAncestorWidgetOfExactType<BottomSheet>() != null;
-    _desiredVisible =
+    final nextVisible =
         isCurrent && (!handlesLocalHistory || isInsideBottomSheet);
+    final changed = _desiredVisible != nextVisible;
+    _desiredVisible = nextVisible;
+    return changed;
   }
 
   bool get _shouldMonitorRouteState =>
@@ -37,9 +44,8 @@ mixin CNPlatformViewModalVisibility<T extends StatefulWidget> on State<T> {
       _monitorScheduled = false;
       if (!mounted) return;
 
-      final previousVisible = _desiredVisible;
-      _updateDesiredVisibility();
-      if (previousVisible != _desiredVisible) {
+      if (_updateDesiredVisibility()) {
+        setState(() {});
         _schedulePlatformViewVisibilitySync();
       }
 
