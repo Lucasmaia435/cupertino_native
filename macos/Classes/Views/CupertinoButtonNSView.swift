@@ -1,6 +1,123 @@
 import FlutterMacOS
 import Cocoa
 import CoreText
+import SwiftUI
+
+private struct ButtonBackgroundGradient {
+  let colors: [NSColor]
+  let locations: [CGFloat]?
+  let startPoint: CGPoint
+  let endPoint: CGPoint
+}
+
+private final class ButtonGradientBackgroundView: NSView {
+  var isRound: Bool = false {
+    didSet { needsLayout = true }
+  }
+
+  var gradient: ButtonBackgroundGradient? {
+    didSet { updateGradient() }
+  }
+
+  private let gradientLayer = CAGradientLayer()
+
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    wantsLayer = true
+    layer?.backgroundColor = NSColor.clear.cgColor
+    layer?.masksToBounds = true
+    layer?.addSublayer(gradientLayer)
+    isHidden = true
+  }
+
+  required init?(coder: NSCoder) { return nil }
+
+  override func layout() {
+    super.layout()
+    gradientLayer.frame = bounds
+    layer?.cornerRadius = min(bounds.width, bounds.height) / 2.0
+  }
+
+  private func updateGradient() {
+    guard let gradient else {
+      gradientLayer.colors = nil
+      gradientLayer.locations = nil
+      isHidden = true
+      return
+    }
+
+    gradientLayer.colors = gradient.colors.map(\.cgColor)
+    gradientLayer.locations = gradient.locations?.map {
+      NSNumber(value: Double($0))
+    }
+    gradientLayer.startPoint = gradient.startPoint
+    gradientLayer.endPoint = gradient.endPoint
+    isHidden = false
+  }
+}
+
+@available(macOS 26.0, *)
+private struct GlassGradientChrome: View {
+  let gradient: ButtonBackgroundGradient
+  let isRound: Bool
+  let isEnabled: Bool
+
+  private var gradientStops: [Gradient.Stop] {
+    if let locations = gradient.locations, locations.count == gradient.colors.count {
+      return zip(gradient.colors, locations).map { color, location in
+        Gradient.Stop(
+          color: Color(nsColor: color),
+          location: Double(location)
+        )
+      }
+    }
+
+    guard gradient.colors.count > 1 else {
+      return gradient.colors.map { Gradient.Stop(color: Color(nsColor: $0), location: 0) }
+    }
+
+    let step = 1.0 / Double(gradient.colors.count - 1)
+    return gradient.colors.enumerated().map { index, color in
+      Gradient.Stop(
+        color: Color(nsColor: color),
+        location: Double(index) * step
+      )
+    }
+  }
+
+  private var linearGradient: LinearGradient {
+    LinearGradient(
+      gradient: Gradient(stops: gradientStops),
+      startPoint: UnitPoint(x: gradient.startPoint.x, y: gradient.startPoint.y),
+      endPoint: UnitPoint(x: gradient.endPoint.x, y: gradient.endPoint.y)
+    )
+  }
+
+  var body: some View {
+    Group {
+      if isRound {
+        let shape = Circle()
+        ZStack {
+          linearGradient.clipShape(shape)
+          shape
+            .fill(Color.clear)
+            .glassEffect(.regular, in: shape)
+            .opacity(isEnabled ? 1.0 : 0.9)
+        }
+      } else {
+        let shape = Capsule()
+        ZStack {
+          linearGradient.clipShape(shape)
+          shape
+            .fill(Color.clear)
+            .glassEffect(.regular, in: shape)
+            .opacity(isEnabled ? 1.0 : 0.9)
+        }
+      }
+    }
+    .allowsHitTesting(false)
+  }
+}
 
 class CupertinoButtonNSView: NSView {
   private struct FlutterFontManifestEntry {
@@ -12,15 +129,28 @@ class CupertinoButtonNSView: NSView {
   private static var cachedFontManifest: [FlutterFontManifestEntry]?
 
   private let channel: FlutterMethodChannel
+  private let gradientBackgroundView: ButtonGradientBackgroundView
   private let button: NSButton
+  private let gradientBackgroundInset: CGFloat = 3.0
+  private var gradientLeadingConstraint: NSLayoutConstraint?
+  private var gradientTrailingConstraint: NSLayoutConstraint?
+  private var gradientTopConstraint: NSLayoutConstraint?
+  private var gradientBottomConstraint: NSLayoutConstraint?
+  private var glassHostingView: NSHostingView<AnyView>?
+  private var glassLeadingConstraint: NSLayoutConstraint?
+  private var glassTrailingConstraint: NSLayoutConstraint?
+  private var glassTopConstraint: NSLayoutConstraint?
+  private var glassBottomConstraint: NSLayoutConstraint?
   private var isEnabled: Bool = true
   private var currentButtonStyle: String = "automatic"
   private var currentTintColor: NSColor? = nil
   private var currentBackgroundColor: NSColor? = nil
+  private var currentBackgroundGradient: ButtonBackgroundGradient? = nil
   private var isRoundButton: Bool = false
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
+    self.gradientBackgroundView = ButtonGradientBackgroundView(frame: .zero)
     self.button = NSButton(title: "", target: nil, action: nil)
     super.init(frame: .zero)
 
@@ -33,6 +163,7 @@ class CupertinoButtonNSView: NSView {
     var isDark: Bool = false
     var tint: NSColor? = nil
     var backgroundColor: NSColor? = nil
+    var backgroundGradient: ButtonBackgroundGradient? = nil
     var enabled: Bool = true
     var iconMode: String? = nil
     var iconPalette: [NSNumber] = []
@@ -57,6 +188,7 @@ class CupertinoButtonNSView: NSView {
         if let n = style["backgroundColor"] as? NSNumber {
           backgroundColor = Self.colorFromARGB(n.intValue)
         }
+        backgroundGradient = Self.backgroundGradient(from: style["backgroundGradient"])
       }
       if let e = dict["enabled"] as? NSNumber { enabled = e.boolValue }
       if let m = dict["buttonIconRenderingMode"] as? String { iconMode = m }
@@ -89,6 +221,7 @@ class CupertinoButtonNSView: NSView {
     appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
     currentTintColor = tint
     currentBackgroundColor = backgroundColor
+    currentBackgroundGradient = backgroundGradient
     currentButtonStyle = buttonStyle
     isRoundButton = makeRound
 
@@ -130,6 +263,7 @@ class CupertinoButtonNSView: NSView {
                 fontFamily: iconDataFontFamily,
                 fontPackage: iconDataFontPackage,
                 pointSize: iconSize ?? 18,
+                color: iconColor,
                 fill: iconDataFill,
                 weight: iconDataWeight,
                 grade: iconDataGrade,
@@ -138,19 +272,29 @@ class CupertinoButtonNSView: NSView {
       button.image = image
       button.imagePosition = .imageOnly
     }
-    applyButtonStyle()
-    button.setButtonType(.momentaryPushIn)
-    button.isEnabled = enabled
-    isEnabled = enabled
-
+    addSubview(gradientBackgroundView)
     addSubview(button)
+    gradientBackgroundView.translatesAutoresizingMaskIntoConstraints = false
     button.translatesAutoresizingMaskIntoConstraints = false
+    gradientLeadingConstraint = gradientBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor)
+    gradientTrailingConstraint = gradientBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor)
+    gradientTopConstraint = gradientBackgroundView.topAnchor.constraint(equalTo: topAnchor)
+    gradientBottomConstraint = gradientBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor)
     NSLayoutConstraint.activate([
+      gradientLeadingConstraint!,
+      gradientTrailingConstraint!,
+      gradientTopConstraint!,
+      gradientBottomConstraint!,
       button.leadingAnchor.constraint(equalTo: leadingAnchor),
       button.trailingAnchor.constraint(equalTo: trailingAnchor),
       button.topAnchor.constraint(equalTo: topAnchor),
       button.bottomAnchor.constraint(equalTo: bottomAnchor)
     ])
+
+    isEnabled = enabled
+    button.setButtonType(.momentaryPushIn)
+    button.isEnabled = enabled
+    applyButtonStyle()
 
     button.target = self
     button.action = #selector(onPressed(_:))
@@ -175,6 +319,13 @@ class CupertinoButtonNSView: NSView {
             self.currentBackgroundColor = Self.colorFromARGB(n.intValue)
             shouldReapplyStyle = true
           }
+          if args["backgroundGradient"] is NSNull {
+            self.currentBackgroundGradient = nil
+            shouldReapplyStyle = true
+          } else if let gradient = Self.backgroundGradient(from: args["backgroundGradient"]) {
+            self.currentBackgroundGradient = gradient
+            shouldReapplyStyle = true
+          }
           if let bs = args["buttonStyle"] as? String {
             self.currentButtonStyle = bs
             shouldReapplyStyle = true
@@ -194,6 +345,7 @@ class CupertinoButtonNSView: NSView {
         if let args = call.arguments as? [String: Any], let e = args["enabled"] as? NSNumber {
           self.isEnabled = e.boolValue
           self.button.isEnabled = self.isEnabled
+          self.updateGradientBackground()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing enabled", details: nil)) }
       case "setButtonIcon":
@@ -279,6 +431,9 @@ class CupertinoButtonNSView: NSView {
     }
     let fontFamily = args["buttonIconDataFontFamily"] as? String
     let fontPackage = args["buttonIconDataFontPackage"] as? String
+    let iconColor = (args["buttonIconColor"] as? NSNumber).map {
+      Self.colorFromARGB($0.intValue)
+    }
     let fill = (args["buttonIconDataFill"] as? NSNumber).map { CGFloat(truncating: $0) }
     let weight = (args["buttonIconDataWeight"] as? NSNumber).map { CGFloat(truncating: $0) }
     let grade = (args["buttonIconDataGrade"] as? NSNumber).map { CGFloat(truncating: $0) }
@@ -289,6 +444,7 @@ class CupertinoButtonNSView: NSView {
       fontFamily: fontFamily,
       fontPackage: fontPackage,
       pointSize: size,
+      color: iconColor,
       fill: fill,
       weight: weight,
       grade: grade,
@@ -301,6 +457,7 @@ class CupertinoButtonNSView: NSView {
     fontFamily: String?,
     fontPackage: String?,
     pointSize: CGFloat,
+    color: NSColor?,
     fill: CGFloat?,
     weight: CGFloat?,
     grade: CGFloat?,
@@ -324,7 +481,7 @@ class CupertinoButtonNSView: NSView {
     paragraph.alignment = .center
     let attrs: [NSAttributedString.Key: Any] = [
       .font: resolvedFont,
-      .foregroundColor: NSColor.labelColor,
+      .foregroundColor: color ?? NSColor.black,
       .paragraphStyle: paragraph
     ]
     let glyphSize = glyph.size(withAttributes: attrs)
@@ -336,6 +493,7 @@ class CupertinoButtonNSView: NSView {
     )
     glyph.draw(in: rect, withAttributes: attrs)
     image.unlockFocus()
+    image.isTemplate = (color == nil)
     return image
   }
 
@@ -561,7 +719,109 @@ class CupertinoButtonNSView: NSView {
     return NSColor(srgbRed: r, green: g, blue: b, alpha: a)
   }
 
+  private static func backgroundGradient(from value: Any?) -> ButtonBackgroundGradient? {
+    guard let dict = value as? [String: Any],
+          let rawColors = dict["colors"] as? [NSNumber],
+          !rawColors.isEmpty else {
+      return nil
+    }
+
+    let colors = rawColors.map { Self.colorFromARGB($0.intValue) }
+    let locations = (dict["stops"] as? [NSNumber])?.map {
+      CGFloat($0.doubleValue)
+    }
+
+    return ButtonBackgroundGradient(
+      colors: colors,
+      locations: locations,
+      startPoint: unitPoint(
+        from: dict["begin"] as? [String: Any],
+        fallbackRawX: -1,
+        fallbackRawY: -1
+      ),
+      endPoint: unitPoint(
+        from: dict["end"] as? [String: Any],
+        fallbackRawX: 1,
+        fallbackRawY: 1
+      )
+    )
+  }
+
+  private static func unitPoint(
+    from dict: [String: Any]?,
+    fallbackRawX: Double,
+    fallbackRawY: Double
+  ) -> CGPoint {
+    let rawX = (dict?["x"] as? NSNumber)?.doubleValue ?? fallbackRawX
+    let rawY = (dict?["y"] as? NSNumber)?.doubleValue ?? fallbackRawY
+    let x = min(max((rawX + 1.0) / 2.0, 0.0), 1.0)
+    let y = min(max((rawY + 1.0) / 2.0, 0.0), 1.0)
+    return CGPoint(x: CGFloat(x), y: CGFloat(y))
+  }
+
+  private func installGlassBackgroundIfNeeded() {
+    guard #available(macOS 26.0, *) else { return }
+    guard glassHostingView == nil else { return }
+
+    let host = NSHostingView(rootView: AnyView(EmptyView()))
+    host.translatesAutoresizingMaskIntoConstraints = false
+    glassHostingView = host
+    addSubview(host, positioned: .below, relativeTo: button)
+    glassLeadingConstraint = host.leadingAnchor.constraint(equalTo: leadingAnchor)
+    glassTrailingConstraint = host.trailingAnchor.constraint(equalTo: trailingAnchor)
+    glassTopConstraint = host.topAnchor.constraint(equalTo: topAnchor)
+    glassBottomConstraint = host.bottomAnchor.constraint(equalTo: bottomAnchor)
+    NSLayoutConstraint.activate([
+      glassLeadingConstraint!,
+      glassTrailingConstraint!,
+      glassTopConstraint!,
+      glassBottomConstraint!
+    ])
+  }
+
+  private func updateGradientInsets() {
+    let inset = (isRoundButton && currentBackgroundGradient != nil) ? gradientBackgroundInset : 0
+    gradientLeadingConstraint?.constant = inset
+    gradientTrailingConstraint?.constant = -inset
+    gradientTopConstraint?.constant = inset
+    gradientBottomConstraint?.constant = -inset
+    glassLeadingConstraint?.constant = inset
+    glassTrailingConstraint?.constant = -inset
+    glassTopConstraint?.constant = inset
+    glassBottomConstraint?.constant = -inset
+  }
+
+  private func updateGradientBackground() {
+    updateGradientInsets()
+    let alpha: CGFloat = isEnabled ? 1.0 : 0.55
+    let usesGlassChrome = currentBackgroundGradient != nil &&
+      ["glass", "prominentGlass"].contains(currentButtonStyle)
+
+    if usesGlassChrome, #available(macOS 26.0, *), let gradient = currentBackgroundGradient {
+      installGlassBackgroundIfNeeded()
+      glassHostingView?.rootView = AnyView(
+        GlassGradientChrome(
+          gradient: gradient,
+          isRound: isRoundButton,
+          isEnabled: isEnabled
+        )
+      )
+      glassHostingView?.alphaValue = alpha
+      glassHostingView?.isHidden = false
+      gradientBackgroundView.gradient = nil
+      return
+    }
+
+    glassHostingView?.isHidden = true
+    gradientBackgroundView.isRound = isRoundButton
+    gradientBackgroundView.gradient = currentBackgroundGradient
+    gradientBackgroundView.alphaValue = alpha
+  }
+
   private func applyButtonStyle() {
+    updateGradientBackground()
+    let hasGradientBackground = currentBackgroundGradient != nil
+
     switch currentButtonStyle {
     case "plain":
       button.bezelStyle = .texturedRounded
@@ -591,7 +851,9 @@ class CupertinoButtonNSView: NSView {
         }
       }
 
-      if let background = currentBackgroundColor {
+      if hasGradientBackground {
+        button.bezelColor = .clear
+      } else if let background = currentBackgroundColor {
         button.bezelColor = background
         if currentButtonStyle == "plain" {
           button.isBordered = true

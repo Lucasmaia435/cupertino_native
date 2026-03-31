@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
 import '../channel/platform_view_modal_visibility.dart';
@@ -21,6 +23,7 @@ class CNButton extends StatefulWidget {
     this.enabled = true,
     this.tint,
     this.backgroundColor,
+    this.backgroundGradient,
     this.height = 32.0,
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
@@ -38,6 +41,7 @@ class CNButton extends StatefulWidget {
     this.enabled = true,
     this.tint,
     this.backgroundColor,
+    this.backgroundGradient,
     double size = 44.0,
     this.style = CNButtonStyle.glass,
   }) : assert(
@@ -76,6 +80,12 @@ class CNButton extends StatefulWidget {
 
   /// Optional background color for the native button body.
   final Color? backgroundColor;
+
+  /// Optional linear gradient rendered behind the native button body.
+  ///
+  /// When both [backgroundColor] and [backgroundGradient] are provided,
+  /// [backgroundGradient] takes precedence.
+  final LinearGradient? backgroundGradient;
 
   /// Control height.
   final double height;
@@ -118,6 +128,7 @@ class _CNButtonState extends State<CNButton>
   double? _lastIconOpticalSize;
   double? _intrinsicWidth;
   CNButtonStyle? _lastStyle;
+  String? _lastBackgroundGradientSignature;
   Offset? _downPosition;
   bool _pressed = false;
 
@@ -160,38 +171,11 @@ class _CNButtonState extends State<CNButton>
 
   @override
   Widget build(BuildContext context) {
+    final backgroundGradient = _encodeBackgroundGradient();
+
     if (!(defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS)) {
-      // Fallback Flutter implementation
-      return SizedBox(
-        height: widget.height,
-        width: widget.isIcon && widget.round
-            ? (widget.width ?? widget.height)
-            : null,
-        child: CupertinoButton(
-          color: widget.backgroundColor,
-          padding: widget.isIcon
-              ? const EdgeInsets.all(4)
-              : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          onPressed: (widget.enabled && widget.onPressed != null)
-              ? widget.onPressed
-              : null,
-          child: widget.isIcon
-              ? (widget.flutterIcon != null
-                    ? Icon(
-                        widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
-                        size: _effectiveIconSize,
-                        color: widget.flutterIcon!.color,
-                        fill: widget.flutterIcon!.fill,
-                        weight: widget.flutterIcon!.weight,
-                        grade: widget.flutterIcon!.grade,
-                        opticalSize: widget.flutterIcon!.opticalSize,
-                        shadows: widget.flutterIcon!.shadows,
-                      )
-                    : Icon(CupertinoIcons.ellipsis, size: _effectiveIconSize))
-              : Text(widget.label ?? ''),
-        ),
-      );
+      return _buildFallbackButton();
     }
 
     trackPlatformViewModalVisibility();
@@ -238,6 +222,8 @@ class _CNButtonState extends State<CNButton>
               widget.backgroundColor,
               context,
             ),
+          if (backgroundGradient != null)
+            'backgroundGradient': backgroundGradient,
         }),
     };
 
@@ -311,6 +297,9 @@ class _CNButtonState extends State<CNButton>
     syncPlatformViewModalVisibility();
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
+    _lastBackgroundGradientSignature = _backgroundGradientSignature(
+      _encodeBackgroundGradient(),
+    );
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
@@ -358,6 +347,10 @@ class _CNButtonState extends State<CNButton>
     if (ch == null) return;
     final tint = resolveColorToArgb(_effectiveTint, context);
     final background = resolveColorToArgb(widget.backgroundColor, context);
+    final backgroundGradient = _encodeBackgroundGradient();
+    final backgroundGradientSignature = _backgroundGradientSignature(
+      backgroundGradient,
+    );
     final preIconName = widget.icon?.name;
     final preIconCodePoint = _flutterIconData?.codePoint;
     final preIconFontFamily = _flutterIconData?.fontFamily;
@@ -378,6 +371,10 @@ class _CNButtonState extends State<CNButton>
     if (_lastBackground != background) {
       styleUpdates['backgroundColor'] = background;
       _lastBackground = background;
+    }
+    if (_lastBackgroundGradientSignature != backgroundGradientSignature) {
+      styleUpdates['backgroundGradient'] = backgroundGradient;
+      _lastBackgroundGradientSignature = backgroundGradientSignature;
     }
     if (_lastStyle != widget.style) {
       styleUpdates['buttonStyle'] = widget.style.name;
@@ -414,7 +411,7 @@ class _CNButtonState extends State<CNButton>
         updates['buttonIconSize'] = iconSize;
         _lastIconSize = iconSize;
       }
-      if (_lastIconColor != iconColor && iconColor != null) {
+      if (_lastIconColor != iconColor) {
         updates['buttonIconColor'] = iconColor;
         _lastIconColor = iconColor;
       }
@@ -474,6 +471,10 @@ class _CNButtonState extends State<CNButton>
     final isDark = _isDark;
     final tint = resolveColorToArgb(_effectiveTint, context);
     final background = resolveColorToArgb(widget.backgroundColor, context);
+    final backgroundGradient = _encodeBackgroundGradient();
+    final backgroundGradientSignature = _backgroundGradientSignature(
+      backgroundGradient,
+    );
     if (_lastIsDark != isDark) {
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
       _lastIsDark = isDark;
@@ -488,9 +489,84 @@ class _CNButtonState extends State<CNButton>
       styleUpdates['backgroundColor'] = background;
       _lastBackground = background;
     }
+    if (_lastBackgroundGradientSignature != backgroundGradientSignature) {
+      styleUpdates['backgroundGradient'] = backgroundGradient;
+      _lastBackgroundGradientSignature = backgroundGradientSignature;
+    }
     if (styleUpdates.isNotEmpty) {
       await ch.invokeMethod('setStyle', styleUpdates);
     }
+  }
+
+  Map<String, dynamic>? _encodeBackgroundGradient() {
+    final gradient = widget.backgroundGradient;
+    if (gradient == null) return null;
+
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final begin = gradient.begin.resolve(textDirection);
+    final end = gradient.end.resolve(textDirection);
+
+    return <String, dynamic>{
+      'colors': gradient.colors
+          .map((color) => resolveColorToArgb(color, context)!)
+          .toList(),
+      if (gradient.stops != null) 'stops': gradient.stops,
+      'begin': <String, double>{'x': begin.x, 'y': begin.y},
+      'end': <String, double>{'x': end.x, 'y': end.y},
+    };
+  }
+
+  String? _backgroundGradientSignature(Map<String, dynamic>? gradient) {
+    if (gradient == null) return null;
+    return jsonEncode(gradient);
+  }
+
+  Widget _buildFallbackButton() {
+    final width = widget.isIcon && widget.round
+        ? (widget.width ?? widget.height)
+        : null;
+
+    return SizedBox(
+      height: widget.height,
+      width: width,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: widget.backgroundGradient == null
+              ? widget.backgroundColor
+              : null,
+          gradient: widget.backgroundGradient,
+          shape: widget.isIcon && widget.round
+              ? BoxShape.circle
+              : BoxShape.rectangle,
+          borderRadius: widget.isIcon && widget.round
+              ? null
+              : BorderRadius.circular(widget.height / 2),
+        ),
+        child: CupertinoButton(
+          color: const Color(0x00000000),
+          padding: widget.isIcon
+              ? const EdgeInsets.all(4)
+              : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          onPressed: (widget.enabled && widget.onPressed != null)
+              ? widget.onPressed
+              : null,
+          child: widget.isIcon
+              ? (widget.flutterIcon != null
+                    ? Icon(
+                        widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
+                        size: _effectiveIconSize,
+                        color: widget.flutterIcon!.color,
+                        fill: widget.flutterIcon!.fill,
+                        weight: widget.flutterIcon!.weight,
+                        grade: widget.flutterIcon!.grade,
+                        opticalSize: widget.flutterIcon!.opticalSize,
+                        shadows: widget.flutterIcon!.shadows,
+                      )
+                    : Icon(CupertinoIcons.ellipsis, size: _effectiveIconSize))
+              : Text(widget.label ?? ''),
+        ),
+      ),
+    );
   }
 
   Future<void> _setPressed(bool pressed) async {

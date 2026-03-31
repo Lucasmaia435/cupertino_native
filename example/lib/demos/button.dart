@@ -1,6 +1,8 @@
 import 'package:cupertino_native/cupertino_native.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Icons;
+import 'package:flutter/material.dart';
+
+const _glassGradient = LinearGradient(colors: [Color(0xBFE9135F), Color(0xBF9108BF), Color(0xBF8083FF)], stops: [0.11, 0.50, 0.90], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
 class ButtonDemoPage extends StatefulWidget {
   const ButtonDemoPage({super.key});
@@ -34,8 +36,8 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                 CNButton(label: 'Bordered', style: CNButtonStyle.bordered, onPressed: () => _set('Bordered'), shrinkWrap: true),
                 CNButton(label: 'BorderedProminent', style: CNButtonStyle.borderedProminent, onPressed: () => _set('BorderedProminent'), shrinkWrap: true),
                 CNButton(label: 'Filled', style: CNButtonStyle.filled, onPressed: () => _set('Filled'), shrinkWrap: true),
-                CNButton(label: 'Glass', style: CNButtonStyle.glass, onPressed: () => _set('Glass'), shrinkWrap: true),
-                CNButton(label: 'ProminentGlass', style: CNButtonStyle.prominentGlass, onPressed: () => _set('ProminentGlass'), shrinkWrap: true),
+                CNButton(label: 'Glass', style: CNButtonStyle.glass, tint: CupertinoColors.white, backgroundGradient: _glassGradient, onPressed: () => _set('Glass'), shrinkWrap: true),
+                CNButton(label: 'ProminentGlass', style: CNButtonStyle.prominentGlass, tint: CupertinoColors.white, backgroundGradient: _glassGradient, onPressed: () => _set('ProminentGlass'), shrinkWrap: true),
                 CNButton(label: 'Disabled', style: CNButtonStyle.bordered, onPressed: null, shrinkWrap: true),
               ],
             ),
@@ -53,9 +55,27 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                 CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.bordered, onPressed: () => _set('Icon Bordered')),
                 CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.borderedProminent, onPressed: () => _set('Icon BorderedProminent')),
                 CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.filled, onPressed: () => _set('Icon Filled')),
-                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.glass, onPressed: () => _set('Icon Glass')),
-                CNButton.icon(icon: const CNSymbol('heart.fill', size: 18), style: CNButtonStyle.prominentGlass, onPressed: () => _set('Icon ProminentGlass')),
-                CNButton.icon(flutterIcon: const Icon(Icons.favorite_outline, size: 22, fill: 1), style: CNButtonStyle.prominentGlass, onPressed: () => _set('IconData Favorite')),
+                CNButton.icon(
+                  icon: const CNSymbol('heart.fill', size: 18, color: CupertinoColors.white),
+                  style: CNButtonStyle.glass,
+                  backgroundGradient: _glassGradient,
+                  onPressed: () => _set('Icon Glass'),
+                ),
+                CNButton.icon(
+                  icon: const CNSymbol('heart.fill', size: 18, color: CupertinoColors.white),
+                  style: CNButtonStyle.prominentGlass,
+                  tint: CupertinoColors.white,
+                  backgroundGradient: _glassGradient,
+                  onPressed: () => _set('Icon ProminentGlass'),
+                ),
+                CNButton.icon(
+                  flutterIcon: const Icon(Icons.favorite_outline, size: 22, fill: 1, color: Colors.black),
+                  // icon: const CNSymbol('heart.fill', size: 18, color: CupertinoColors.destructiveRed),
+                  style: CNButtonStyle.prominentGlass,
+                  tint: CupertinoColors.transparent,
+                  backgroundGradient: _glassGradient,
+                  onPressed: () => _set('IconData Favorite'),
+                ),
               ],
             ),
             const SizedBox(height: 48),
