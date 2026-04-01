@@ -10,6 +10,11 @@ import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 import '../style/button_style.dart';
 
+const Duration _kCNButtonImplicitAnimationDuration = Duration(
+  milliseconds: 340,
+);
+const Curve _kCNButtonImplicitAnimationCurve = Curves.easeInCubic;
+
 /// A Cupertino-native push button.
 ///
 /// Embeds a native UIButton/NSButton for authentic visuals and behavior on
@@ -280,7 +285,9 @@ class _CNButtonState extends State<CNButton>
             _setPressed(false);
             _downPosition = null;
           },
-          child: SizedBox(
+          child: AnimatedContainer(
+            duration: _kCNButtonImplicitAnimationDuration,
+            curve: _kCNButtonImplicitAnimationCurve,
             height: widget.height,
             width: width,
             child: platformView,
@@ -526,45 +533,45 @@ class _CNButtonState extends State<CNButton>
         ? (widget.width ?? widget.height)
         : null;
 
-    return SizedBox(
+    return AnimatedContainer(
+      duration: _kCNButtonImplicitAnimationDuration,
+      curve: _kCNButtonImplicitAnimationCurve,
       height: widget.height,
       width: width,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: widget.backgroundGradient == null
-              ? widget.backgroundColor
-              : null,
-          gradient: widget.backgroundGradient,
-          shape: widget.isIcon && widget.round
-              ? BoxShape.circle
-              : BoxShape.rectangle,
-          borderRadius: widget.isIcon && widget.round
-              ? null
-              : BorderRadius.circular(widget.height / 2),
-        ),
-        child: CupertinoButton(
-          color: const Color(0x00000000),
-          padding: widget.isIcon
-              ? const EdgeInsets.all(4)
-              : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          onPressed: (widget.enabled && widget.onPressed != null)
-              ? widget.onPressed
-              : null,
-          child: widget.isIcon
-              ? (widget.flutterIcon != null
-                    ? Icon(
-                        widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
-                        size: _effectiveIconSize,
-                        color: widget.flutterIcon!.color,
-                        fill: widget.flutterIcon!.fill,
-                        weight: widget.flutterIcon!.weight,
-                        grade: widget.flutterIcon!.grade,
-                        opticalSize: widget.flutterIcon!.opticalSize,
-                        shadows: widget.flutterIcon!.shadows,
-                      )
-                    : Icon(CupertinoIcons.ellipsis, size: _effectiveIconSize))
-              : Text(widget.label ?? ''),
-        ),
+      decoration: BoxDecoration(
+        color: widget.backgroundGradient == null
+            ? widget.backgroundColor
+            : null,
+        gradient: widget.backgroundGradient,
+        shape: widget.isIcon && widget.round
+            ? BoxShape.circle
+            : BoxShape.rectangle,
+        borderRadius: widget.isIcon && widget.round
+            ? null
+            : BorderRadius.circular(widget.height / 2),
+      ),
+      child: CupertinoButton(
+        color: const Color(0x00000000),
+        padding: widget.isIcon
+            ? const EdgeInsets.all(4)
+            : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        onPressed: (widget.enabled && widget.onPressed != null)
+            ? widget.onPressed
+            : null,
+        child: widget.isIcon
+            ? (widget.flutterIcon != null
+                  ? Icon(
+                      widget.flutterIcon!.icon ?? CupertinoIcons.ellipsis,
+                      size: _effectiveIconSize,
+                      color: widget.flutterIcon!.color,
+                      fill: widget.flutterIcon!.fill,
+                      weight: widget.flutterIcon!.weight,
+                      grade: widget.flutterIcon!.grade,
+                      opticalSize: widget.flutterIcon!.opticalSize,
+                      shadows: widget.flutterIcon!.shadows,
+                    )
+                  : Icon(CupertinoIcons.ellipsis, size: _effectiveIconSize))
+            : Text(widget.label ?? ''),
       ),
     );
   }

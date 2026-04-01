@@ -70,6 +70,9 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private let gradientBackgroundView: ButtonGradientBackgroundView
   private let button: UIButton
   private let gradientBackgroundInset: CGFloat = 3.0
+  private let implicitAnimationDuration: TimeInterval = 0.2
+  private let implicitAnimationControlPoint1 = CGPoint(x: 0.55, y: 0.055)
+  private let implicitAnimationControlPoint2 = CGPoint(x: 0.675, y: 0.19)
   private var gradientLeadingConstraint: NSLayoutConstraint?
   private var gradientTrailingConstraint: NSLayoutConstraint?
   private var gradientTopConstraint: NSLayoutConstraint?
@@ -276,15 +279,22 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
             shouldReapplyStyle = true
           }
           if shouldReapplyStyle {
-            self.applyButtonStyle(buttonStyle: self.currentButtonStyle, round: makeRound)
+            self.performAnimatedUpdates {
+              self.applyButtonStyle(
+                buttonStyle: self.currentButtonStyle,
+                round: self.isRoundButton
+              )
+            }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
       case "setEnabled":
         if let args = call.arguments as? [String: Any], let e = args["enabled"] as? NSNumber {
-          self.isEnabled = e.boolValue
-          self.button.isEnabled = self.isEnabled
-          self.updateGradientBackground(round: self.isRoundButton)
+          self.performAnimatedUpdates {
+            self.isEnabled = e.boolValue
+            self.button.isEnabled = self.isEnabled
+            self.updateGradientBackground(round: self.isRoundButton)
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing enabled", details: nil)) }
       case "setPressed":
@@ -295,13 +305,17 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         } else { result(FlutterError(code: "bad_args", message: "Missing pressed", details: nil)) }
       case "setButtonTitle":
         if let args = call.arguments as? [String: Any], let t = args["title"] as? String {
-          self.setButtonContent(title: t, image: nil, iconOnly: false)
+          self.performAnimatedUpdates {
+            self.setButtonContent(title: t, image: nil, iconOnly: false)
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing title", details: nil)) }
       case "setButtonIcon":
         if let args = call.arguments as? [String: Any] {
           let image = Self.buttonImage(from: args)
-          self.setButtonContent(title: nil, image: image, iconOnly: true)
+          self.performAnimatedUpdates {
+            self.setButtonContent(title: nil, image: image, iconOnly: true)
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing icon args", details: nil)) }
       case "setVisible":
@@ -718,6 +732,44 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     } else {
       gradientBackgroundView.alpha = isPressed ? 0.88 : 1.0
     }
+  }
+
+  private func addFadeTransition(to layer: CALayer?) {
+    let transition = CATransition()
+    transition.type = .fade
+    transition.duration = implicitAnimationDuration
+    transition.timingFunction = CAMediaTimingFunction(
+      controlPoints: Float(implicitAnimationControlPoint1.x),
+      Float(implicitAnimationControlPoint1.y),
+      Float(implicitAnimationControlPoint2.x),
+      Float(implicitAnimationControlPoint2.y)
+    )
+    layer?.add(transition, forKey: "cnButtonImplicitFade")
+  }
+
+  private func performAnimatedUpdates(_ updates: @escaping () -> Void) {
+    guard container.window != nil else {
+      updates()
+      container.layoutIfNeeded()
+      return
+    }
+
+    container.layoutIfNeeded()
+    addFadeTransition(to: button.layer)
+    addFadeTransition(to: gradientBackgroundView.layer)
+    let timing = UICubicTimingParameters(
+      controlPoint1: implicitAnimationControlPoint1,
+      controlPoint2: implicitAnimationControlPoint2
+    )
+    let animator = UIViewPropertyAnimator(
+      duration: implicitAnimationDuration,
+      timingParameters: timing
+    )
+    animator.addAnimations {
+      updates()
+      self.container.layoutIfNeeded()
+    }
+    animator.startAnimation()
   }
 
   private func applyButtonStyle(buttonStyle: String, round: Bool) {

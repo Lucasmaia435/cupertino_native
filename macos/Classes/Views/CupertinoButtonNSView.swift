@@ -132,6 +132,7 @@ class CupertinoButtonNSView: NSView {
   private let gradientBackgroundView: ButtonGradientBackgroundView
   private let button: NSButton
   private let gradientBackgroundInset: CGFloat = 3.0
+  private let implicitAnimationDuration: TimeInterval = 0.2
   private var gradientLeadingConstraint: NSLayoutConstraint?
   private var gradientTrailingConstraint: NSLayoutConstraint?
   private var gradientTopConstraint: NSLayoutConstraint?
@@ -219,6 +220,7 @@ class CupertinoButtonNSView: NSView {
     wantsLayer = true
     layer?.backgroundColor = NSColor.clear.cgColor
     appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+    button.wantsLayer = true
     currentTintColor = tint
     currentBackgroundColor = backgroundColor
     currentBackgroundGradient = backgroundGradient
@@ -331,31 +333,41 @@ class CupertinoButtonNSView: NSView {
             shouldReapplyStyle = true
           }
           if shouldReapplyStyle {
-            self.applyButtonStyle()
+            self.performAnimatedUpdates {
+              self.applyButtonStyle()
+            }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
       case "setButtonTitle":
         if let args = call.arguments as? [String: Any], let t = args["title"] as? String {
-          self.button.title = t
-          self.button.image = nil
+          self.performAnimatedUpdates {
+            self.button.title = t
+            self.button.image = nil
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing title", details: nil)) }
       case "setEnabled":
         if let args = call.arguments as? [String: Any], let e = args["enabled"] as? NSNumber {
-          self.isEnabled = e.boolValue
-          self.button.isEnabled = self.isEnabled
-          self.updateGradientBackground()
+          self.performAnimatedUpdates {
+            self.isEnabled = e.boolValue
+            self.button.isEnabled = self.isEnabled
+            self.updateGradientBackground()
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing enabled", details: nil)) }
       case "setButtonIcon":
         if let args = call.arguments as? [String: Any] {
-          if let image = Self.buttonImage(from: args) {
-            self.button.image = image
-            self.button.title = ""
-            self.button.imagePosition = .imageOnly
+          self.performAnimatedUpdates {
+            if let image = Self.buttonImage(from: args) {
+              self.button.image = image
+              self.button.title = ""
+              self.button.imagePosition = .imageOnly
+            }
+            if let r = args["round"] as? NSNumber, r.boolValue {
+              self.button.bezelStyle = .circular
+            }
           }
-          if let r = args["round"] as? NSNumber, r.boolValue { self.button.bezelStyle = .circular }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing icon args", details: nil)) }
       case "setVisible":
@@ -765,6 +777,7 @@ class CupertinoButtonNSView: NSView {
 
     let host = NSHostingView(rootView: AnyView(EmptyView()))
     host.translatesAutoresizingMaskIntoConstraints = false
+    host.wantsLayer = true
     glassHostingView = host
     addSubview(host, positioned: .below, relativeTo: button)
     glassLeadingConstraint = host.leadingAnchor.constraint(equalTo: leadingAnchor)
@@ -791,6 +804,43 @@ class CupertinoButtonNSView: NSView {
     glassBottomConstraint?.constant = -inset
   }
 
+  private func addFadeTransition(to layer: CALayer?) {
+    let transition = CATransition()
+    transition.type = .fade
+    transition.duration = implicitAnimationDuration
+    transition.timingFunction = CAMediaTimingFunction(
+      controlPoints: 0.55,
+      0.055,
+      0.675,
+      0.19
+    )
+    layer?.add(transition, forKey: "cnButtonImplicitFade")
+  }
+
+  private func performAnimatedUpdates(_ updates: @escaping () -> Void) {
+    guard window != nil else {
+      updates()
+      layoutSubtreeIfNeeded()
+      return
+    }
+
+    layoutSubtreeIfNeeded()
+    addFadeTransition(to: button.layer)
+    addFadeTransition(to: gradientBackgroundView.layer)
+    addFadeTransition(to: glassHostingView?.layer)
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = implicitAnimationDuration
+      context.timingFunction = CAMediaTimingFunction(
+        controlPoints: 0.55,
+        0.055,
+        0.675,
+        0.19
+      )
+      updates()
+      self.layoutSubtreeIfNeeded()
+    }
+  }
+
   private func updateGradientBackground() {
     updateGradientInsets()
     let alpha: CGFloat = isEnabled ? 1.0 : 0.55
@@ -806,7 +856,11 @@ class CupertinoButtonNSView: NSView {
           isEnabled: isEnabled
         )
       )
-      glassHostingView?.alphaValue = alpha
+      if window != nil {
+        glassHostingView?.animator().alphaValue = alpha
+      } else {
+        glassHostingView?.alphaValue = alpha
+      }
       glassHostingView?.isHidden = false
       gradientBackgroundView.gradient = nil
       return
@@ -815,7 +869,11 @@ class CupertinoButtonNSView: NSView {
     glassHostingView?.isHidden = true
     gradientBackgroundView.isRound = isRoundButton
     gradientBackgroundView.gradient = currentBackgroundGradient
-    gradientBackgroundView.alphaValue = alpha
+    if window != nil {
+      gradientBackgroundView.animator().alphaValue = alpha
+    } else {
+      gradientBackgroundView.alphaValue = alpha
+    }
   }
 
   private func applyButtonStyle() {
