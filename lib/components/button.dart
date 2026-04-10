@@ -483,6 +483,19 @@ class _CNButtonState extends State<CNButton>
       backgroundGradient,
     );
     if (_lastIsDark != isDark) {
+      // Reset all icon tracking synchronously before the await so that
+      // _syncPropsToNativeIfNeeded (called from didUpdateWidget in the same
+      // frame) re-sends the full icon state after the native view resets on
+      // setBrightness. Each field is tracked separately, so all must be
+      // invalidated to guarantee size, color, and data are all re-synced.
+      _lastIconCodePoint = null;
+      _lastIconName = null;
+      _lastIconSize = null;
+      _lastIconColor = null;
+      _lastIconFill = null;
+      _lastIconWeight = null;
+      _lastIconGrade = null;
+      _lastIconOpticalSize = null;
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
       _lastIsDark = isDark;
     }
