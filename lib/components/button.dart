@@ -172,6 +172,7 @@ class _CNButtonState extends State<CNButton>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _syncBrightnessIfNeeded();
+    _syncPropsToNativeIfNeeded();
   }
 
   @override
@@ -474,24 +475,14 @@ class _CNButtonState extends State<CNButton>
   Future<void> _syncBrightnessIfNeeded() async {
     final ch = _channel;
     if (ch == null) return;
-    // Capture context-derived values before any awaits
     final isDark = _isDark;
-    final tint = resolveColorToArgb(_effectiveTint, context);
-    final background = resolveColorToArgb(widget.backgroundColor, context);
-    final backgroundGradient = _encodeBackgroundGradient();
-    final backgroundGradientSignature = _backgroundGradientSignature(
-      backgroundGradient,
-    );
     if (_lastIsDark != isDark) {
-      // Update _lastIsDark before the first await so that any concurrent call
-      // from a second didChangeDependencies (possible during parent rebuilds)
-      // sees the updated value and exits early — preventing a race where the
-      // second call skips the icon re-send because the first already updated
-      // _lastIconName, leaving the native side without an icon after its own
-      // setBrightness reset.
+      // Null icon tracking synchronously before the first await so that the
+      // concurrent _syncPropsToNativeIfNeeded call (from didChangeDependencies)
+      // sees stale tracking and re-sends the full icon state. The platform
+      // channel guarantees setBrightness arrives at native before setButtonIcon
+      // because it is enqueued first.
       _lastIsDark = isDark;
-      // Invalidate all icon tracking so _syncPropsToNativeIfNeeded re-sends
-      // the full icon state after the native view resets on setBrightness.
       _lastIconCodePoint = null;
       _lastIconName = null;
       _lastIconFontFamily = null;
@@ -504,27 +495,6 @@ class _CNButtonState extends State<CNButton>
       _lastIconGrade = null;
       _lastIconOpticalSize = null;
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
-      // Re-sync icon explicitly: didUpdateWidget is not guaranteed to fire
-      // after a system theme change (it only fires on parent widget rebuild),
-      // so we cannot rely on it to trigger the re-send in release/profile mode.
-      if (mounted) await _syncPropsToNativeIfNeeded();
-    }
-    // Also propagate theme-driven tint changes (e.g., accent color changes)
-    final styleUpdates = <String, dynamic>{};
-    if (_lastTint != tint && tint != null) {
-      styleUpdates['tint'] = tint;
-      _lastTint = tint;
-    }
-    if (_lastBackground != background) {
-      styleUpdates['backgroundColor'] = background;
-      _lastBackground = background;
-    }
-    if (_lastBackgroundGradientSignature != backgroundGradientSignature) {
-      styleUpdates['backgroundGradient'] = backgroundGradient;
-      _lastBackgroundGradientSignature = backgroundGradientSignature;
-    }
-    if (styleUpdates.isNotEmpty) {
-      await ch.invokeMethod('setStyle', styleUpdates);
     }
   }
 
