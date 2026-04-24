@@ -483,10 +483,20 @@ class _CNButtonState extends State<CNButton>
       backgroundGradient,
     );
     if (_lastIsDark != isDark) {
+      // Update _lastIsDark before the first await so that any concurrent call
+      // from a second didChangeDependencies (possible during parent rebuilds)
+      // sees the updated value and exits early — preventing a race where the
+      // second call skips the icon re-send because the first already updated
+      // _lastIconName, leaving the native side without an icon after its own
+      // setBrightness reset.
+      _lastIsDark = isDark;
       // Invalidate all icon tracking so _syncPropsToNativeIfNeeded re-sends
       // the full icon state after the native view resets on setBrightness.
       _lastIconCodePoint = null;
       _lastIconName = null;
+      _lastIconFontFamily = null;
+      _lastIconFontPackage = null;
+      _lastIconMatchTextDirection = null;
       _lastIconSize = null;
       _lastIconColor = null;
       _lastIconFill = null;
@@ -494,7 +504,6 @@ class _CNButtonState extends State<CNButton>
       _lastIconGrade = null;
       _lastIconOpticalSize = null;
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
-      _lastIsDark = isDark;
       // Re-sync icon explicitly: didUpdateWidget is not guaranteed to fire
       // after a system theme change (it only fires on parent widget rebuild),
       // so we cannot rely on it to trigger the re-send in release/profile mode.
