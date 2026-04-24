@@ -483,11 +483,8 @@ class _CNButtonState extends State<CNButton>
       backgroundGradient,
     );
     if (_lastIsDark != isDark) {
-      // Reset all icon tracking synchronously before the await so that
-      // _syncPropsToNativeIfNeeded (called from didUpdateWidget in the same
-      // frame) re-sends the full icon state after the native view resets on
-      // setBrightness. Each field is tracked separately, so all must be
-      // invalidated to guarantee size, color, and data are all re-synced.
+      // Invalidate all icon tracking so _syncPropsToNativeIfNeeded re-sends
+      // the full icon state after the native view resets on setBrightness.
       _lastIconCodePoint = null;
       _lastIconName = null;
       _lastIconSize = null;
@@ -498,6 +495,10 @@ class _CNButtonState extends State<CNButton>
       _lastIconOpticalSize = null;
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
       _lastIsDark = isDark;
+      // Re-sync icon explicitly: didUpdateWidget is not guaranteed to fire
+      // after a system theme change (it only fires on parent widget rebuild),
+      // so we cannot rely on it to trigger the re-send in release/profile mode.
+      if (mounted) await _syncPropsToNativeIfNeeded();
     }
     // Also propagate theme-driven tint changes (e.g., accent color changes)
     final styleUpdates = <String, dynamic>{};
