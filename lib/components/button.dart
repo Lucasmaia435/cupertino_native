@@ -171,8 +171,15 @@ class _CNButtonState extends State<CNButton>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncBrightnessIfNeeded();
-    _syncPropsToNativeIfNeeded();
+    _syncOnDependencies();
+  }
+
+  Future<void> _syncOnDependencies() async {
+    // Await brightness first so the nulled icon tracking (done synchronously
+    // inside _syncBrightnessIfNeeded) is visible when _syncPropsToNativeIfNeeded
+    // runs, guaranteeing the icon is resent after every brightness change.
+    await _syncBrightnessIfNeeded();
+    await _syncPropsToNativeIfNeeded();
   }
 
   @override
@@ -477,11 +484,9 @@ class _CNButtonState extends State<CNButton>
     if (ch == null) return;
     final isDark = _isDark;
     if (_lastIsDark != isDark) {
-      // Null icon tracking synchronously before the first await so that the
-      // concurrent _syncPropsToNativeIfNeeded call (from didChangeDependencies)
-      // sees stale tracking and re-sends the full icon state. The platform
-      // channel guarantees setBrightness arrives at native before setButtonIcon
-      // because it is enqueued first.
+      // Null icon tracking so the sequential _syncPropsToNativeIfNeeded call
+      // (awaited in _syncOnDependencies after this returns) sees stale state
+      // and re-sends the full icon to native after the brightness update.
       _lastIsDark = isDark;
       _lastIconCodePoint = null;
       _lastIconName = null;
