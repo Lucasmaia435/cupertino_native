@@ -237,6 +237,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
         if let value = behavior["textInputAction"] as? String {
           textInputAction = value
         }
+        if let value = (behavior["autocorrect"] as? NSNumber)?.boolValue {
+          textView.isAutomaticSpellingCorrectionEnabled = value
+        }
       }
       if let layout = dict["layout"] as? [String: Any] {
         if let value = layout["height"] as? NSNumber { minHeight = CGFloat(truncating: value) }
@@ -1022,6 +1025,9 @@ class CupertinoSearchBarNSView: NSView, NSTextViewDelegate {
     }
     if let value = params["textInputAction"] as? String {
       textInputAction = value
+    }
+    if let value = (params["autocorrect"] as? NSNumber)?.boolValue {
+      textView.isAutomaticSpellingCorrectionEnabled = value
     }
     if trailingActionsVisibilityRule == "whileEmptyBeforeInteractionOrFocused" &&
         previousTrailingRule != trailingActionsVisibilityRule {

@@ -263,6 +263,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
           if let value = behavior["textInputAction"] as? String {
             textInputAction = value
           }
+          if let value = (behavior["autocorrect"] as? NSNumber)?.boolValue {
+            textView.autocorrectionType = value ? .yes : .no
+          }
 	      }
 	      if let layout = dict["layout"] as? [String: Any] {
 	        if let value = layout["height"] as? NSNumber { minHeight = CGFloat(truncating: value) }
@@ -1025,6 +1028,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     }
     if let value = params["textInputAction"] as? String {
       textInputAction = value
+    }
+    if let value = (params["autocorrect"] as? NSNumber)?.boolValue {
+      textView.autocorrectionType = value ? .yes : .no
     }
     if trailingActionsVisibilityRule == "whileEmptyBeforeInteractionOrFocused" &&
         previousTrailingRule != trailingActionsVisibilityRule {

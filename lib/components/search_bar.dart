@@ -117,6 +117,7 @@ class CNTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.padding = EdgeInsets.zero,
     this.shrinkWrap = false,
+    this.autocorrect = true,
   }) : _textInputAction = textInputAction;
 
   /// Current text displayed by the field.
@@ -177,6 +178,9 @@ class CNTextField extends StatefulWidget {
 
   /// Whether the field should size itself to its visible content width.
   final bool shrinkWrap;
+
+  /// Whether to enable autocorrect on the field.
+  final bool autocorrect;
 
   @override
   State<CNTextField> createState() => _CNTextFieldState();
@@ -708,6 +712,7 @@ class _CNTextFieldState extends State<CNTextField>
       'trailingAccessoryOrder': const <String>[],
       'maxVisibleLines': _effectiveMaxVisibleLines,
       'textInputAction': _encodeTextInputAction(),
+      'autocorrect': widget.autocorrect,
     };
   }
 
@@ -1196,6 +1201,7 @@ class _CNTextFieldState extends State<CNTextField>
                           maxLines: _effectiveMaxVisibleLines,
                           keyboardType: widget.keyboardType,
                           textInputAction: _effectiveTextInputAction,
+                          autocorrect: widget.autocorrect,
                           style: textStyle,
                           strutStyle: strutStyle,
                           placeholder: widget.placeholder,
