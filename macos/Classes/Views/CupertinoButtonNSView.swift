@@ -148,6 +148,7 @@ class CupertinoButtonNSView: NSView {
   private var currentBackgroundColor: NSColor? = nil
   private var currentBackgroundGradient: ButtonBackgroundGradient? = nil
   private var isRoundButton: Bool = false
+  private var storedButtonImage: NSImage? = nil
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
@@ -257,6 +258,7 @@ class CupertinoButtonNSView: NSView {
           break
         }
       } else if let c = iconColor { image = image.tinted(with: c) }
+      storedButtonImage = image
       button.image = image
       button.imagePosition = .imageOnly
     } else if let codePoint = iconDataCodePoint,
@@ -271,6 +273,7 @@ class CupertinoButtonNSView: NSView {
                 grade: iconDataGrade,
                 opticalSize: iconDataOpticalSize
               ) {
+      storedButtonImage = image
       button.image = image
       button.imagePosition = .imageOnly
     }
@@ -341,6 +344,7 @@ class CupertinoButtonNSView: NSView {
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
       case "setButtonTitle":
         if let args = call.arguments as? [String: Any], let t = args["title"] as? String {
+          self.storedButtonImage = nil
           self.performAnimatedUpdates {
             self.button.title = t
             self.button.image = nil
@@ -358,8 +362,10 @@ class CupertinoButtonNSView: NSView {
         } else { result(FlutterError(code: "bad_args", message: "Missing enabled", details: nil)) }
       case "setButtonIcon":
         if let args = call.arguments as? [String: Any] {
+          let image = Self.buttonImage(from: args)
+          self.storedButtonImage = image
           self.performAnimatedUpdates {
-            if let image = Self.buttonImage(from: args) {
+            if let image {
               self.button.image = image
               self.button.title = ""
               self.button.imagePosition = .imageOnly
@@ -377,12 +383,15 @@ class CupertinoButtonNSView: NSView {
         } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
-          // Changing NSView.appearance triggers AppKit layout/redraw that can
-          // clear NSButton.image in release builds. Save and restore it.
-          let savedImage = self.button.image
+          let hasStoredImage = self.storedButtonImage != nil
           self.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
-          if self.button.image == nil, let img = savedImage {
-            self.button.image = img
+          if hasStoredImage {
+            // AppKit may clear NSButton.image asynchronously after an appearance change.
+            // Re-apply storedButtonImage on the next run loop to guarantee it survives.
+            DispatchQueue.main.async { [weak self] in
+              guard let self, let img = self.storedButtonImage else { return }
+              self.button.image = img
+            }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }

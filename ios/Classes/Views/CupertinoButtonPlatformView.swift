@@ -82,6 +82,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private var currentBackgroundColor: UIColor? = nil
   private var currentBackgroundGradient: ButtonBackgroundGradient? = nil
   private var isRoundButton: Bool = false
+  private var storedButtonImage: UIImage? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
@@ -243,6 +244,17 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     }
     setButtonContent(title: title, image: finalImage, iconOnly: (title == nil))
 
+    // Intercept every UIKit updateConfiguration() call so the image is never
+    // silently cleared by trait-collection changes (e.g. overrideUserInterfaceStyle).
+    if #available(iOS 15.0, *) {
+      button.configurationUpdateHandler = { [weak self] btn in
+        guard let self = self, var cfg = btn.configuration else { return }
+        guard cfg.image !== self.storedButtonImage else { return }
+        cfg.image = self.storedButtonImage
+        btn.configuration = cfg
+      }
+    }
+
     // Default system highlight/pressed behavior
     button.addTarget(self, action: #selector(onPressed(_:)), for: .touchUpInside)
     button.adjustsImageWhenHighlighted = true
@@ -326,22 +338,9 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       case "setBrightness":
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
           if #available(iOS 13.0, *) {
-            if #available(iOS 15.0, *) {
-              // In release/hybrid-composition mode, changing overrideUserInterfaceStyle
-              // triggers a real trait-collection update on UIButton, which can cause an
-              // automatic updateConfiguration() call that clears configuration.image.
-              // Save and restore the image so it survives the appearance change.
-              let savedImage = self.button.configuration?.image
-              let savedSymbolCfg = self.button.configuration?.preferredSymbolConfigurationForImage
-              self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
-              if var cfg = self.button.configuration, savedImage != nil {
-                cfg.image = savedImage
-                cfg.preferredSymbolConfigurationForImage = savedSymbolCfg
-                self.button.configuration = cfg
-              }
-            } else {
-              self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
-            }
+            self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
+            // configurationUpdateHandler restores storedButtonImage automatically
+            // whenever UIKit's deferred updateConfiguration() fires after this change.
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
@@ -793,9 +792,11 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     updateGradientBackground(round: round, isPressed: button.isHighlighted)
 
     if #available(iOS 15.0, *) {
-      // Preserve current content while swapping configurations
+      // Preserve current content while swapping configurations.
+      // Use storedButtonImage — configuration?.image may be nil if UIKit's
+      // deferred updateConfiguration() already cleared it before this runs.
       let currentTitle = button.configuration?.title
-      let currentImage = button.configuration?.image
+      let currentImage = storedButtonImage
       let currentSymbolCfg = button.configuration?.preferredSymbolConfigurationForImage
       let hasCustomBackground = currentBackgroundColor != nil
       let hasGradientBackground = currentBackgroundGradient != nil
@@ -882,6 +883,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   }
 
   private func setButtonContent(title: String?, image: UIImage?, iconOnly: Bool) {
+    storedButtonImage = image
     if #available(iOS 15.0, *) {
       var cfg = button.configuration ?? .plain()
       cfg.title = title
