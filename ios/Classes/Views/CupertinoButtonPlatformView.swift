@@ -325,7 +325,24 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
-          if #available(iOS 13.0, *) { self.container.overrideUserInterfaceStyle = isDark ? .dark : .light }
+          if #available(iOS 13.0, *) {
+            if #available(iOS 15.0, *) {
+              // In release/hybrid-composition mode, changing overrideUserInterfaceStyle
+              // triggers a real trait-collection update on UIButton, which can cause an
+              // automatic updateConfiguration() call that clears configuration.image.
+              // Save and restore the image so it survives the appearance change.
+              let savedImage = self.button.configuration?.image
+              let savedSymbolCfg = self.button.configuration?.preferredSymbolConfigurationForImage
+              self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
+              if var cfg = self.button.configuration, savedImage != nil {
+                cfg.image = savedImage
+                cfg.preferredSymbolConfigurationForImage = savedSymbolCfg
+                self.button.configuration = cfg
+              }
+            } else {
+              self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
+            }
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
       default:

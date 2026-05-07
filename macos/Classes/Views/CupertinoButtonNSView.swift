@@ -377,7 +377,13 @@ class CupertinoButtonNSView: NSView {
         } else { result(FlutterError(code: "bad_args", message: "Missing visible", details: nil)) }
       case "setBrightness":
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
+          // Changing NSView.appearance triggers AppKit layout/redraw that can
+          // clear NSButton.image in release builds. Save and restore it.
+          let savedImage = self.button.image
           self.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+          if self.button.image == nil, let img = savedImage {
+            self.button.image = img
+          }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
       case "setPressed":
