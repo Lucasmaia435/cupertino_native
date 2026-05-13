@@ -15,6 +15,66 @@ const Duration _kCNButtonImplicitAnimationDuration = Duration(
 );
 const Curve _kCNButtonImplicitAnimationCurve = Curves.easeInCubic;
 
+/// Controls the background-gradient animation of a [CNButton] from outside
+/// the widget tree. Obtain an instance, pass it to [CNButton.icon] via
+/// [CNButton.gradientController], then call [animateTo] to start a native
+/// CABasicAnimation on iOS/macOS.
+class CNButtonGradientController {
+  _CNButtonState? _attachedState;
+  _PendingGradientAnim? _pending;
+
+  /// Animate the button's AI gradient to [gradient] over [duration].
+  /// Pass `null` to fade the gradient out.
+  /// [curve] accepts `'easeInCubic'` or `'easeOut'`.
+  void animateTo({
+    required LinearGradient? gradient,
+    required Duration duration,
+    String curve = 'easeOut',
+  }) {
+    final state = _attachedState;
+    if (state == null || !state._gradientChannelReady) {
+      _pending = _PendingGradientAnim(gradient: gradient, duration: duration, curve: curve);
+      return;
+    }
+    _pending = null;
+    state._animateGradient(gradient: gradient, duration: duration, curve: curve);
+  }
+
+  void _attach(_CNButtonState state) => _attachedState = state;
+
+  void _detach(_CNButtonState state) {
+    if (_attachedState == state) _attachedState = null;
+  }
+
+  void _onChannelReady() {
+    final pending = _pending;
+    if (pending != null && _attachedState != null) {
+      _pending = null;
+      _attachedState!._animateGradient(
+        gradient: pending.gradient,
+        duration: pending.duration,
+        curve: pending.curve,
+      );
+    }
+  }
+
+  void dispose() {
+    _attachedState = null;
+    _pending = null;
+  }
+}
+
+class _PendingGradientAnim {
+  const _PendingGradientAnim({
+    required this.gradient,
+    required this.duration,
+    required this.curve,
+  });
+  final LinearGradient? gradient;
+  final Duration duration;
+  final String curve;
+}
+
 /// A Cupertino-native push button.
 ///
 /// Embeds a native UIButton/NSButton for authentic visuals and behavior on
@@ -49,6 +109,7 @@ class CNButton extends StatefulWidget {
     this.backgroundGradient,
     double size = 44.0,
     this.style = CNButtonStyle.glass,
+    this.gradientController,
   }) : assert(
          icon == null || flutterIcon == null,
          'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
@@ -103,6 +164,9 @@ class CNButton extends StatefulWidget {
   /// Visual style to apply.
   final CNButtonStyle style;
 
+  /// Optional controller for triggering native gradient animations.
+  final CNButtonGradientController? gradientController;
+
   /// Whether the icon variant (round) is used.
   final bool round;
 
@@ -136,6 +200,7 @@ class _CNButtonState extends State<CNButton>
   String? _lastBackgroundGradientSignature;
   Offset? _downPosition;
   bool _pressed = false;
+  bool _gradientChannelReady = false;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
   IconData? get _flutterIconData => widget.flutterIcon?.icon;
@@ -159,12 +224,17 @@ class _CNButtonState extends State<CNButton>
   @override
   void dispose() {
     _channel?.setMethodCallHandler(null);
+    widget.gradientController?._detach(this);
     super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant CNButton oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.gradientController != widget.gradientController) {
+      oldWidget.gradientController?._detach(this);
+      widget.gradientController?._attach(this);
+    }
     _syncPropsToNativeIfNeeded();
   }
 
@@ -332,6 +402,9 @@ class _CNButtonState extends State<CNButton>
     if (!widget.isIcon) {
       _requestIntrinsicSize();
     }
+    _gradientChannelReady = true;
+    widget.gradientController?._attach(this);
+    widget.gradientController?._onChannelReady();
   }
 
   Future<dynamic> _onMethodCall(MethodCall call) async {
@@ -572,6 +645,33 @@ class _CNButtonState extends State<CNButton>
             : Text(widget.label ?? ''),
       ),
     );
+  }
+
+  void _animateGradient({
+    required LinearGradient? gradient,
+    required Duration duration,
+    String curve = 'easeOut',
+  }) {
+    final ch = _channel;
+    if (ch == null) return;
+    ch.invokeMethod<void>('animateGradient', <String, dynamic>{
+      'gradient': _encodeGradient(gradient),
+      'durationMs': duration.inMilliseconds,
+      'curve': curve,
+    });
+  }
+
+  Map<String, dynamic>? _encodeGradient(LinearGradient? gradient) {
+    if (gradient == null) return null;
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final begin = gradient.begin.resolve(textDirection);
+    final end = gradient.end.resolve(textDirection);
+    return <String, dynamic>{
+      'colors': gradient.colors.map((c) => resolveColorToArgb(c, context)!).toList(),
+      if (gradient.stops != null) 'stops': gradient.stops,
+      'begin': <String, double>{'x': begin.x, 'y': begin.y},
+      'end': <String, double>{'x': end.x, 'y': end.y},
+    };
   }
 
   Future<void> _setPressed(bool pressed) async {

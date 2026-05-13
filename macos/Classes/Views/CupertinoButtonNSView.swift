@@ -130,9 +130,12 @@ class CupertinoButtonNSView: NSView {
 
   private let channel: FlutterMethodChannel
   private let gradientBackgroundView: ButtonGradientBackgroundView
+  private let aiGradientView: ButtonGradientBackgroundView
   private let button: NSButton
   private let gradientBackgroundInset: CGFloat = 3.0
   private let implicitAnimationDuration: TimeInterval = 0.2
+  private let implicitAnimationControlPoint1 = CGPoint(x: 0.55, y: 0.055)
+  private let implicitAnimationControlPoint2 = CGPoint(x: 0.675, y: 0.19)
   private var gradientLeadingConstraint: NSLayoutConstraint?
   private var gradientTrailingConstraint: NSLayoutConstraint?
   private var gradientTopConstraint: NSLayoutConstraint?
@@ -153,6 +156,7 @@ class CupertinoButtonNSView: NSView {
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
     self.gradientBackgroundView = ButtonGradientBackgroundView(frame: .zero)
+    self.aiGradientView = ButtonGradientBackgroundView(frame: .zero)
     self.button = NSButton(title: "", target: nil, action: nil)
     super.init(frame: .zero)
 
@@ -222,11 +226,14 @@ class CupertinoButtonNSView: NSView {
     layer?.backgroundColor = NSColor.clear.cgColor
     appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
     button.wantsLayer = true
+    aiGradientView.alphaValue = 0
+    aiGradientView.translatesAutoresizingMaskIntoConstraints = false
     currentTintColor = tint
     currentBackgroundColor = backgroundColor
     currentBackgroundGradient = backgroundGradient
     currentButtonStyle = buttonStyle
     isRoundButton = makeRound
+    aiGradientView.isRound = makeRound
 
     if let t = title { button.title = t }
     if let name = iconName, var image = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
@@ -279,6 +286,7 @@ class CupertinoButtonNSView: NSView {
     }
     addSubview(gradientBackgroundView)
     addSubview(button)
+    addSubview(aiGradientView, positioned: .below, relativeTo: button)
     gradientBackgroundView.translatesAutoresizingMaskIntoConstraints = false
     button.translatesAutoresizingMaskIntoConstraints = false
     gradientLeadingConstraint = gradientBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor)
@@ -293,7 +301,11 @@ class CupertinoButtonNSView: NSView {
       button.leadingAnchor.constraint(equalTo: leadingAnchor),
       button.trailingAnchor.constraint(equalTo: trailingAnchor),
       button.topAnchor.constraint(equalTo: topAnchor),
-      button.bottomAnchor.constraint(equalTo: bottomAnchor)
+      button.bottomAnchor.constraint(equalTo: bottomAnchor),
+      aiGradientView.leadingAnchor.constraint(equalTo: leadingAnchor),
+      aiGradientView.trailingAnchor.constraint(equalTo: trailingAnchor),
+      aiGradientView.topAnchor.constraint(equalTo: topAnchor),
+      aiGradientView.bottomAnchor.constraint(equalTo: bottomAnchor)
     ])
 
     isEnabled = enabled
@@ -400,6 +412,52 @@ class CupertinoButtonNSView: NSView {
           self.alphaValue = p.boolValue ? 0.7 : 1.0
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing pressed", details: nil)) }
+      case "animateGradient":
+        let args = call.arguments as? [String: Any] ?? [:]
+        let durationMs = (args["durationMs"] as? NSNumber)?.doubleValue ?? 300.0
+        let duration = durationMs / 1000.0
+        let curve = args["curve"] as? String ?? "easeOut"
+        let targetGradient = Self.backgroundGradient(from: args["gradient"])
+        let targetOpacity: CGFloat = targetGradient != nil ? 1.0 : 0.0
+        if targetGradient != nil {
+          self.aiGradientView.gradient = targetGradient!
+          self.aiGradientView.isRound = self.isRoundButton
+        }
+        let currentOpacity: CGFloat = CGFloat(
+          self.aiGradientView.layer?.presentation()?.opacity ?? self.aiGradientView.layer?.opacity ?? 0
+        )
+        let timingFunction: CAMediaTimingFunction
+        if curve == "easeInCubic" {
+          timingFunction = CAMediaTimingFunction(
+            controlPoints: Float(self.implicitAnimationControlPoint1.x),
+            Float(self.implicitAnimationControlPoint1.y),
+            Float(self.implicitAnimationControlPoint2.x),
+            Float(self.implicitAnimationControlPoint2.y)
+          )
+        } else {
+          timingFunction = CAMediaTimingFunction(name: .easeOut)
+        }
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = currentOpacity
+        animation.toValue = targetOpacity
+        animation.duration = duration
+        animation.timingFunction = timingFunction
+        animation.fillMode = .forwards
+        animation.isRemovedOnCompletion = false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.aiGradientView.layer?.opacity = Float(targetOpacity)
+        CATransaction.commit()
+        self.aiGradientView.layer?.add(animation, forKey: "aiGradientOpacity")
+        if targetGradient == nil {
+          DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self else { return }
+            if (self.aiGradientView.layer?.opacity ?? 0) < 0.01 {
+              self.aiGradientView.gradient = nil
+            }
+          }
+        }
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

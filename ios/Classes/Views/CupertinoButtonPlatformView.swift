@@ -83,11 +83,13 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private var currentBackgroundGradient: ButtonBackgroundGradient? = nil
   private var isRoundButton: Bool = false
   private var storedButtonImage: UIImage? = nil
+  private let aiGradientView: ButtonGradientBackgroundView
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
     self.container = UIView(frame: frame)
     self.gradientBackgroundView = ButtonGradientBackgroundView(frame: frame)
+    self.aiGradientView = ButtonGradientBackgroundView(frame: frame)
     self.button = UIButton(type: .system)
 
     var title: String? = nil
@@ -163,10 +165,13 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
 
     gradientBackgroundView.translatesAutoresizingMaskIntoConstraints = false
     button.translatesAutoresizingMaskIntoConstraints = false
+    aiGradientView.translatesAutoresizingMaskIntoConstraints = false
+    aiGradientView.layer.opacity = 0
     if let t = tint { button.tintColor = t }
     else if #available(iOS 13.0, *) { button.tintColor = .label }
 
     container.addSubview(gradientBackgroundView)
+    container.addSubview(aiGradientView)
     container.addSubview(button)
     gradientLeadingConstraint = gradientBackgroundView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
     gradientTrailingConstraint = gradientBackgroundView.trailingAnchor.constraint(equalTo: container.trailingAnchor)
@@ -177,6 +182,10 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       gradientTrailingConstraint!,
       gradientTopConstraint!,
       gradientBottomConstraint!,
+      aiGradientView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      aiGradientView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      aiGradientView.topAnchor.constraint(equalTo: container.topAnchor),
+      aiGradientView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
       button.leadingAnchor.constraint(equalTo: container.leadingAnchor),
       button.trailingAnchor.constraint(equalTo: container.trailingAnchor),
       button.topAnchor.constraint(equalTo: container.topAnchor),
@@ -187,6 +196,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     currentBackgroundColor = backgroundColor
     currentBackgroundGradient = backgroundGradient
     isRoundButton = makeRound
+    aiGradientView.isRound = makeRound
     isEnabled = enabled
     button.isEnabled = enabled
     applyButtonStyle(buttonStyle: buttonStyle, round: makeRound)
@@ -339,11 +349,77 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
           if #available(iOS 13.0, *) {
             self.container.overrideUserInterfaceStyle = isDark ? .dark : .light
-            // configurationUpdateHandler restores storedButtonImage automatically
-            // whenever UIKit's deferred updateConfiguration() fires after this change.
+            // UIKit defers updateConfiguration() to the next run loop after a trait change.
+            // Enqueue a restore *after* that deferred call so the image is never lost,
+            // even if configurationUpdateHandler is not invoked in some edge case.
+            if #available(iOS 15.0, *), self.storedButtonImage != nil {
+              DispatchQueue.main.async { [weak self] in
+                guard let self = self, let img = self.storedButtonImage else { return }
+                guard var cfg = self.button.configuration, cfg.image == nil else { return }
+                cfg.image = img
+                self.button.configuration = cfg
+              }
+            }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
+      case "animateGradient":
+        guard let args = call.arguments as? [String: Any] else {
+          result(FlutterError(code: "bad_args", message: "Expected [String: Any]", details: nil))
+          return
+        }
+        let durationMs = (args["durationMs"] as? NSNumber)?.doubleValue ?? 300.0
+        let duration = durationMs / 1000.0
+        let curveType = args["curve"] as? String ?? "easeOut"
+        let targetGradient = Self.backgroundGradient(from: args["gradient"])
+        let targetOpacity: Float = targetGradient != nil ? 1.0 : 0.0
+
+        if let gradient = targetGradient {
+          self.aiGradientView.gradient = gradient
+          self.aiGradientView.isRound = self.isRoundButton
+        }
+
+        let currentOpacity = self.aiGradientView.layer.presentation()?.opacity
+          ?? self.aiGradientView.layer.opacity
+
+        let timingFunction: CAMediaTimingFunction
+        switch curveType {
+        case "easeInCubic":
+          timingFunction = CAMediaTimingFunction(
+            controlPoints:
+              Float(self.implicitAnimationControlPoint1.x),
+              Float(self.implicitAnimationControlPoint1.y),
+              Float(self.implicitAnimationControlPoint2.x),
+              Float(self.implicitAnimationControlPoint2.y)
+          )
+        default:
+          timingFunction = CAMediaTimingFunction(name: .easeOut)
+        }
+
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = currentOpacity
+        animation.toValue = targetOpacity
+        animation.duration = duration
+        animation.timingFunction = timingFunction
+        animation.fillMode = .forwards
+        animation.isRemovedOnCompletion = false
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.aiGradientView.layer.opacity = targetOpacity
+        CATransaction.commit()
+
+        self.aiGradientView.layer.add(animation, forKey: "aiGradientOpacity")
+
+        if targetGradient == nil {
+          DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self else { return }
+            if self.aiGradientView.layer.opacity < 0.01 {
+              self.aiGradientView.gradient = nil
+            }
+          }
+        }
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
