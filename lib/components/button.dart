@@ -10,9 +10,7 @@ import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 import '../style/button_style.dart';
 
-const Duration _kCNButtonImplicitAnimationDuration = Duration(
-  milliseconds: 340,
-);
+const Duration _kCNButtonImplicitAnimationDuration = Duration(milliseconds: 340);
 const Curve _kCNButtonImplicitAnimationCurve = Curves.easeInCubic;
 
 /// Controls the background-gradient animation of a [CNButton] from outside
@@ -26,11 +24,7 @@ class CNButtonGradientController {
   /// Animate the button's AI gradient to [gradient] over [duration].
   /// Pass `null` to fade the gradient out.
   /// [curve] accepts `'easeInCubic'` or `'easeOut'`.
-  void animateTo({
-    required LinearGradient? gradient,
-    required Duration duration,
-    String curve = 'easeOut',
-  }) {
+  void animateTo({required LinearGradient? gradient, required Duration duration, String curve = 'easeOut'}) {
     final state = _attachedState;
     if (state == null || !state._gradientChannelReady) {
       _pending = _PendingGradientAnim(gradient: gradient, duration: duration, curve: curve);
@@ -50,11 +44,7 @@ class CNButtonGradientController {
     final pending = _pending;
     if (pending != null && _attachedState != null) {
       _pending = null;
-      _attachedState!._animateGradient(
-        gradient: pending.gradient,
-        duration: pending.duration,
-        curve: pending.curve,
-      );
+      _attachedState!._animateGradient(gradient: pending.gradient, duration: pending.duration, curve: pending.curve);
     }
   }
 
@@ -65,11 +55,7 @@ class CNButtonGradientController {
 }
 
 class _PendingGradientAnim {
-  const _PendingGradientAnim({
-    required this.gradient,
-    required this.duration,
-    required this.curve,
-  });
+  const _PendingGradientAnim({required this.gradient, required this.duration, required this.curve});
   final LinearGradient? gradient;
   final Duration duration;
   final String curve;
@@ -92,38 +78,22 @@ class CNButton extends StatefulWidget {
     this.height = 32.0,
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
+    this.gradientController,
   }) : icon = null,
        flutterIcon = null,
        width = null,
        round = false;
 
   /// Creates a round, icon-only variant of [CNButton].
-  const CNButton.icon({
-    super.key,
-    this.icon,
-    this.flutterIcon,
-    this.onPressed,
-    this.enabled = true,
-    this.tint,
-    this.backgroundColor,
-    this.backgroundGradient,
-    double size = 44.0,
-    this.style = CNButtonStyle.glass,
-    this.gradientController,
-  }) : assert(
-         icon == null || flutterIcon == null,
-         'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
-       ),
-       assert(
-         icon != null || flutterIcon != null,
-         'Provide icon (CNSymbol) or flutterIcon (Icon).',
-       ),
-       label = null,
-       round = true,
-       width = size,
-       height = size,
-       shrinkWrap = false,
-       super();
+  const CNButton.icon({super.key, this.icon, this.flutterIcon, this.onPressed, this.enabled = true, this.tint, this.backgroundColor, this.backgroundGradient, double size = 44.0, this.style = CNButtonStyle.glass, this.gradientController})
+    : assert(icon == null || flutterIcon == null, 'Use either icon (CNSymbol) or flutterIcon (Icon), not both.'),
+      assert(icon != null || flutterIcon != null, 'Provide icon (CNSymbol) or flutterIcon (Icon).'),
+      label = null,
+      round = true,
+      width = size,
+      height = size,
+      shrinkWrap = false,
+      super();
 
   /// Button text (null in icon mode).
   final String? label; // null in icon mode
@@ -177,8 +147,7 @@ class CNButton extends StatefulWidget {
   State<CNButton> createState() => _CNButtonState();
 }
 
-class _CNButtonState extends State<CNButton>
-    with CNPlatformViewModalVisibility<CNButton> {
+class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<CNButton> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
@@ -204,19 +173,14 @@ class _CNButtonState extends State<CNButton>
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
   IconData? get _flutterIconData => widget.flutterIcon?.icon;
-  double? get _effectiveIconSize =>
-      widget.icon?.size ?? widget.flutterIcon?.size;
-  int? get _effectiveIconColor => resolveColorToArgb(
-    widget.icon?.color ?? widget.flutterIcon?.color,
-    context,
-  );
+  double? get _effectiveIconSize => widget.icon?.size ?? widget.flutterIcon?.size;
+  int? get _effectiveIconColor => resolveColorToArgb(widget.icon?.color ?? widget.flutterIcon?.color, context);
   double? get _effectiveIconFill => widget.flutterIcon?.fill;
   double? get _effectiveIconWeight => widget.flutterIcon?.weight;
   double? get _effectiveIconGrade => widget.flutterIcon?.grade;
   double? get _effectiveIconOpticalSize => widget.flutterIcon?.opticalSize;
 
-  Color? get _effectiveTint =>
-      widget.tint ?? CupertinoTheme.of(context).primaryColor;
+  Color? get _effectiveTint => widget.tint ?? CupertinoTheme.of(context).primaryColor;
 
   @override
   MethodChannel? get visibilityChannel => _channel;
@@ -256,8 +220,7 @@ class _CNButtonState extends State<CNButton>
   Widget build(BuildContext context) {
     final backgroundGradient = _encodeBackgroundGradient();
 
-    if (!(defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS)) {
+    if (!(defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS)) {
       return _buildFallbackButton();
     }
 
@@ -270,44 +233,23 @@ class _CNButtonState extends State<CNButton>
       if (widget.icon != null) 'buttonIconName': widget.icon!.name,
       if (_effectiveIconSize != null) 'buttonIconSize': _effectiveIconSize,
       if (_effectiveIconColor != null) 'buttonIconColor': _effectiveIconColor,
-      if (widget.icon?.mode != null)
-        'buttonIconRenderingMode': widget.icon!.mode!.name,
-      if (widget.icon?.paletteColors != null)
-        'buttonIconPaletteColors': widget.icon!.paletteColors!
-            .map((c) => resolveColorToArgb(c, context))
-            .toList(),
-      if (widget.icon?.gradient != null)
-        'buttonIconGradientEnabled': widget.icon!.gradient,
-      if (_flutterIconData != null)
-        'buttonIconDataCodePoint': _flutterIconData!.codePoint,
-      if (_flutterIconData != null)
-        'buttonIconDataFontFamily': _flutterIconData!.fontFamily,
-      if (_flutterIconData != null)
-        'buttonIconDataFontPackage': _flutterIconData!.fontPackage,
-      if (_flutterIconData != null)
-        'buttonIconDataMatchTextDirection':
-            _flutterIconData!.matchTextDirection,
+      if (widget.icon?.mode != null) 'buttonIconRenderingMode': widget.icon!.mode!.name,
+      if (widget.icon?.paletteColors != null) 'buttonIconPaletteColors': widget.icon!.paletteColors!.map((c) => resolveColorToArgb(c, context)).toList(),
+      if (widget.icon?.gradient != null) 'buttonIconGradientEnabled': widget.icon!.gradient,
+      if (_flutterIconData != null) 'buttonIconDataCodePoint': _flutterIconData!.codePoint,
+      if (_flutterIconData != null) 'buttonIconDataFontFamily': _flutterIconData!.fontFamily,
+      if (_flutterIconData != null) 'buttonIconDataFontPackage': _flutterIconData!.fontPackage,
+      if (_flutterIconData != null) 'buttonIconDataMatchTextDirection': _flutterIconData!.matchTextDirection,
       if (_effectiveIconFill != null) 'buttonIconDataFill': _effectiveIconFill,
-      if (_effectiveIconWeight != null)
-        'buttonIconDataWeight': _effectiveIconWeight,
-      if (_effectiveIconGrade != null)
-        'buttonIconDataGrade': _effectiveIconGrade,
-      if (_effectiveIconOpticalSize != null)
-        'buttonIconDataOpticalSize': _effectiveIconOpticalSize,
+      if (_effectiveIconWeight != null) 'buttonIconDataWeight': _effectiveIconWeight,
+      if (_effectiveIconGrade != null) 'buttonIconDataGrade': _effectiveIconGrade,
+      if (_effectiveIconOpticalSize != null) 'buttonIconDataOpticalSize': _effectiveIconOpticalSize,
       if (widget.isIcon) 'round': true,
       'buttonStyle': widget.style.name,
       'enabled': (widget.enabled && widget.onPressed != null),
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
-        ..addAll({
-          if (widget.backgroundColor != null)
-            'backgroundColor': resolveColorToArgb(
-              widget.backgroundColor,
-              context,
-            ),
-          if (backgroundGradient != null)
-            'backgroundGradient': backgroundGradient,
-        }),
+        ..addAll({if (widget.backgroundColor != null) 'backgroundColor': resolveColorToArgb(widget.backgroundColor, context), if (backgroundGradient != null) 'backgroundGradient': backgroundGradient}),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
@@ -326,9 +268,7 @@ class _CNButtonState extends State<CNButton>
             creationParams: creationParams,
             creationParamsCodec: const StandardMessageCodec(),
             onPlatformViewCreated: _onCreated,
-            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-              Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-            },
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{Factory<TapGestureRecognizer>(() => TapGestureRecognizer())},
           );
 
     return LayoutBuilder(
@@ -363,13 +303,7 @@ class _CNButtonState extends State<CNButton>
             _setPressed(false);
             _downPosition = null;
           },
-          child: AnimatedContainer(
-            duration: _kCNButtonImplicitAnimationDuration,
-            curve: _kCNButtonImplicitAnimationCurve,
-            height: widget.height,
-            width: width,
-            child: platformView,
-          ),
+          child: AnimatedContainer(duration: _kCNButtonImplicitAnimationDuration, curve: _kCNButtonImplicitAnimationCurve, height: widget.height, width: width, child: platformView),
         );
       },
     );
@@ -382,9 +316,7 @@ class _CNButtonState extends State<CNButton>
     syncPlatformViewModalVisibility();
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
-    _lastBackgroundGradientSignature = _backgroundGradientSignature(
-      _encodeBackgroundGradient(),
-    );
+    _lastBackgroundGradientSignature = _backgroundGradientSignature(_encodeBackgroundGradient());
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
@@ -436,9 +368,7 @@ class _CNButtonState extends State<CNButton>
     final tint = resolveColorToArgb(_effectiveTint, context);
     final background = resolveColorToArgb(widget.backgroundColor, context);
     final backgroundGradient = _encodeBackgroundGradient();
-    final backgroundGradientSignature = _backgroundGradientSignature(
-      backgroundGradient,
-    );
+    final backgroundGradientSignature = _backgroundGradientSignature(backgroundGradient);
     final preIconName = widget.icon?.name;
     final preIconCodePoint = _flutterIconData?.codePoint;
     final preIconFontFamily = _flutterIconData?.fontFamily;
@@ -472,9 +402,7 @@ class _CNButtonState extends State<CNButton>
       await ch.invokeMethod('setStyle', styleUpdates);
     }
     // Enabled state
-    await ch.invokeMethod('setEnabled', {
-      'enabled': (widget.enabled && widget.onPressed != null),
-    });
+    await ch.invokeMethod('setEnabled', {'enabled': (widget.enabled && widget.onPressed != null)});
     if (_lastTitle != widget.label && widget.label != null) {
       await ch.invokeMethod('setButtonTitle', {'title': widget.label});
       _lastTitle = widget.label;
@@ -486,8 +414,7 @@ class _CNButtonState extends State<CNButton>
       final iconSize = preIconSize;
       final iconColor = preIconColor;
       final updates = <String, dynamic>{};
-      if (iconName != null &&
-          (_lastIconName != iconName || _lastIconCodePoint != null)) {
+      if (iconName != null && (_lastIconName != iconName || _lastIconCodePoint != null)) {
         updates['buttonIconName'] = iconName;
         _lastIconName = iconName;
         _lastIconCodePoint = null;
@@ -504,23 +431,13 @@ class _CNButtonState extends State<CNButton>
         _lastIconColor = iconColor;
       }
       final iconDataChanged =
-          _lastIconCodePoint != preIconCodePoint ||
-          _lastIconFontFamily != preIconFontFamily ||
-          _lastIconFontPackage != preIconFontPackage ||
-          _lastIconMatchTextDirection != preIconMatchTextDirection ||
-          _lastIconName != null;
-      final iconDataStyleChanged =
-          _lastIconFill != preIconFill ||
-          _lastIconWeight != preIconWeight ||
-          _lastIconGrade != preIconGrade ||
-          _lastIconOpticalSize != preIconOpticalSize;
-      if ((iconDataChanged || iconDataStyleChanged) &&
-          preIconCodePoint != null) {
+          _lastIconCodePoint != preIconCodePoint || _lastIconFontFamily != preIconFontFamily || _lastIconFontPackage != preIconFontPackage || _lastIconMatchTextDirection != preIconMatchTextDirection || _lastIconName != null;
+      final iconDataStyleChanged = _lastIconFill != preIconFill || _lastIconWeight != preIconWeight || _lastIconGrade != preIconGrade || _lastIconOpticalSize != preIconOpticalSize;
+      if ((iconDataChanged || iconDataStyleChanged) && preIconCodePoint != null) {
         updates['buttonIconDataCodePoint'] = preIconCodePoint;
         updates['buttonIconDataFontFamily'] = preIconFontFamily;
         updates['buttonIconDataFontPackage'] = preIconFontPackage;
-        updates['buttonIconDataMatchTextDirection'] =
-            preIconMatchTextDirection ?? false;
+        updates['buttonIconDataMatchTextDirection'] = preIconMatchTextDirection ?? false;
         updates['buttonIconDataFill'] = preIconFill;
         updates['buttonIconDataWeight'] = preIconWeight;
         updates['buttonIconDataGrade'] = preIconGrade;
@@ -539,9 +456,7 @@ class _CNButtonState extends State<CNButton>
         updates['buttonIconRenderingMode'] = widget.icon!.mode!.name;
       }
       if (widget.icon?.paletteColors != null) {
-        updates['buttonIconPaletteColors'] = widget.icon!.paletteColors!
-            .map((c) => resolveColorToArgb(c, context))
-            .toList();
+        updates['buttonIconPaletteColors'] = widget.icon!.paletteColors!.map((c) => resolveColorToArgb(c, context)).toList();
       }
       if (widget.icon?.gradient != null) {
         updates['buttonIconGradientEnabled'] = widget.icon!.gradient;
@@ -585,9 +500,7 @@ class _CNButtonState extends State<CNButton>
     final end = gradient.end.resolve(textDirection);
 
     return <String, dynamic>{
-      'colors': gradient.colors
-          .map((color) => resolveColorToArgb(color, context)!)
-          .toList(),
+      'colors': gradient.colors.map((color) => resolveColorToArgb(color, context)!).toList(),
       if (gradient.stops != null) 'stops': gradient.stops,
       'begin': <String, double>{'x': begin.x, 'y': begin.y},
       'end': <String, double>{'x': end.x, 'y': end.y},
@@ -600,9 +513,7 @@ class _CNButtonState extends State<CNButton>
   }
 
   Widget _buildFallbackButton() {
-    final width = widget.isIcon && widget.round
-        ? (widget.width ?? widget.height)
-        : null;
+    final width = widget.isIcon && widget.round ? (widget.width ?? widget.height) : null;
 
     return AnimatedContainer(
       duration: _kCNButtonImplicitAnimationDuration,
@@ -610,25 +521,15 @@ class _CNButtonState extends State<CNButton>
       height: widget.height,
       width: width,
       decoration: BoxDecoration(
-        color: widget.backgroundGradient == null
-            ? widget.backgroundColor
-            : null,
+        color: widget.backgroundGradient == null ? widget.backgroundColor : null,
         gradient: widget.backgroundGradient,
-        shape: widget.isIcon && widget.round
-            ? BoxShape.circle
-            : BoxShape.rectangle,
-        borderRadius: widget.isIcon && widget.round
-            ? null
-            : BorderRadius.circular(widget.height / 2),
+        shape: widget.isIcon && widget.round ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: widget.isIcon && widget.round ? null : BorderRadius.circular(widget.height / 2),
       ),
       child: CupertinoButton(
         color: const Color(0x00000000),
-        padding: widget.isIcon
-            ? const EdgeInsets.all(4)
-            : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        onPressed: (widget.enabled && widget.onPressed != null)
-            ? widget.onPressed
-            : null,
+        padding: widget.isIcon ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        onPressed: (widget.enabled && widget.onPressed != null) ? widget.onPressed : null,
         child: widget.isIcon
             ? (widget.flutterIcon != null
                   ? Icon(
@@ -647,18 +548,10 @@ class _CNButtonState extends State<CNButton>
     );
   }
 
-  void _animateGradient({
-    required LinearGradient? gradient,
-    required Duration duration,
-    String curve = 'easeOut',
-  }) {
+  void _animateGradient({required LinearGradient? gradient, required Duration duration, String curve = 'easeOut'}) {
     final ch = _channel;
     if (ch == null) return;
-    ch.invokeMethod<void>('animateGradient', <String, dynamic>{
-      'gradient': _encodeGradient(gradient),
-      'durationMs': duration.inMilliseconds,
-      'curve': curve,
-    });
+    ch.invokeMethod<void>('animateGradient', <String, dynamic>{'gradient': _encodeGradient(gradient), 'durationMs': duration.inMilliseconds, 'curve': curve});
   }
 
   Map<String, dynamic>? _encodeGradient(LinearGradient? gradient) {
