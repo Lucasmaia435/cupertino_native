@@ -1,6 +1,7 @@
 import 'package:cupertino_native/cupertino_native.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:cupertino_native/style/mesh_gradient.dart';
 
 const _glassGradient = LinearGradient(colors: [Color(0xBFE9135F), Color(0xBF9108BF), Color(0xBF8083FF)], stops: [0.11, 0.50, 0.90], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
@@ -58,23 +59,25 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                 CNButton.icon(
                   icon: const CNSymbol('heart.fill', size: 18, color: CupertinoColors.white),
                   style: CNButtonStyle.glass,
-                  backgroundGradient: _glassGradient,
+                  meshGradient: CNButtonMeshGradient(colors: [const Color(0xFFE9135F), const Color(0xFF9108BF), const Color(0xFF8083FF)], animationSpeed: 10),
+
                   onPressed: () => _set('Icon Glass'),
                 ),
                 CNButton.icon(
                   icon: const CNSymbol('heart.fill', size: 18, color: CupertinoColors.white),
                   style: CNButtonStyle.prominentGlass,
-                  tint: CupertinoColors.white,
-                  backgroundGradient: _glassGradient,
+                  tint: CupertinoColors.transparent,
+                  meshGradient: CNButtonMeshGradient(colors: [const Color(0xFFE9135F), const Color(0xFF9108BF), const Color(0xFF8083FF)], animationSpeed: 10),
                   onPressed: () => _set('Icon ProminentGlass'),
                 ),
                 CNButton.icon(
-                  flutterIcon: const Icon(Icons.favorite_outline, size: 22, fill: 1, color: Colors.black),
+                  flutterIcon: const Icon(Icons.favorite_outline, size: 60, fill: 1, color: Colors.white),
                   // icon: const CNSymbol('heart.fill', size: 18, color: CupertinoColors.destructiveRed),
                   style: CNButtonStyle.prominentGlass,
                   tint: CupertinoColors.transparent,
-                  backgroundGradient: _glassGradient,
+                  meshGradient: CNButtonMeshGradient(colors: [const Color(0xFFE9135F), const Color(0xFF9108BF), const Color(0xFF8083FF)], animationSpeed: 100),
                   onPressed: () => _set('IconData Favorite'),
+                  size: 120,
                 ),
               ],
             ),

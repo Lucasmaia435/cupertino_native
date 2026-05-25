@@ -67,7 +67,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
 
   private let channel: FlutterMethodChannel
   private let container: UIView
-  private let gradientBackgroundView: ButtonGradientBackgroundView
+  private let gradientBackgroundView: AnimatedMeshGradientView
   private let button: UIButton
   private let gradientBackgroundInset: CGFloat = 3.0
   private let implicitAnimationDuration: TimeInterval = 0.2
@@ -81,6 +81,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private var currentButtonStyle: String = "automatic"
   private var currentBackgroundColor: UIColor? = nil
   private var currentBackgroundGradient: ButtonBackgroundGradient? = nil
+  private var currentMeshColors: [UIColor]? = nil
+  private var currentMeshSpeed: Double = 0.35
   private var isRoundButton: Bool = false
   private var storedButtonImage: UIImage? = nil
   private let aiGradientView: ButtonGradientBackgroundView
@@ -88,7 +90,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
     self.container = UIView(frame: frame)
-    self.gradientBackgroundView = ButtonGradientBackgroundView(frame: frame)
+    self.gradientBackgroundView = AnimatedMeshGradientView(frame: frame)
     self.aiGradientView = ButtonGradientBackgroundView(frame: frame)
     self.button = UIButton(type: .system)
 
@@ -101,6 +103,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     var tint: UIColor? = nil
     var backgroundColor: UIColor? = nil
     var backgroundGradient: ButtonBackgroundGradient? = nil
+    var meshColors: [UIColor]? = nil
+    var meshSpeed: Double = 0.35
     var buttonStyle: String = "automatic"
     var enabled: Bool = true
     var iconMode: String? = nil
@@ -127,6 +131,10 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
           backgroundColor = Self.colorFromARGB(n.intValue)
         }
         backgroundGradient = Self.backgroundGradient(from: style["backgroundGradient"])
+        if let mgDict = style["meshGradient"] as? [String: Any] {
+          meshColors = Self.meshColorsFromDict(mgDict)
+          meshSpeed  = (mgDict["speed"] as? NSNumber)?.doubleValue ?? 0.35
+        }
       }
       if let bs = dict["buttonStyle"] as? String { buttonStyle = bs }
       if let e = dict["enabled"] as? NSNumber { enabled = e.boolValue }
@@ -195,6 +203,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     currentButtonStyle = buttonStyle
     currentBackgroundColor = backgroundColor
     currentBackgroundGradient = backgroundGradient
+    currentMeshColors = meshColors
+    currentMeshSpeed  = meshSpeed
     isRoundButton = makeRound
     aiGradientView.isRound = makeRound
     isEnabled = enabled
@@ -294,6 +304,16 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
             shouldReapplyStyle = true
           } else if let gradient = Self.backgroundGradient(from: args["backgroundGradient"]) {
             self.currentBackgroundGradient = gradient
+            shouldReapplyStyle = true
+          }
+          if args["meshGradient"] is NSNull {
+            self.currentMeshColors = nil
+            self.currentMeshSpeed  = 0.35
+            shouldReapplyStyle = true
+          } else if let mgDict = args["meshGradient"] as? [String: Any],
+                    let colors = Self.meshColorsFromDict(mgDict) {
+            self.currentMeshColors = colors
+            self.currentMeshSpeed  = (mgDict["speed"] as? NSNumber)?.doubleValue ?? 0.35
             shouldReapplyStyle = true
           }
           if let bs = args["buttonStyle"] as? String {
@@ -797,6 +817,15 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     )
   }
 
+  /// Extracts a `[UIColor]` array from a `{ "colors": [...ARGB ints...] }` dict.
+  /// Returns `nil` if the dict is absent or the array is empty.
+  private static func meshColorsFromDict(_ dict: [String: Any]) -> [UIColor]? {
+    guard let rawColors = dict["colors"] as? [NSNumber], !rawColors.isEmpty else {
+      return nil
+    }
+    return rawColors.map { Self.colorFromARGB($0.intValue) }
+  }
+
   private static func unitPoint(
     from dict: [String: Any]?,
     fallbackRawX: Double,
@@ -810,14 +839,28 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   }
 
   private func updateGradientBackground(round: Bool, isPressed: Bool = false) {
-    let inset = (round && currentBackgroundGradient != nil) ? gradientBackgroundInset : 0
+    // meshGradient takes precedence over backgroundGradient.
+    let activeColors: [UIColor]?
+    let activeSpeed: Double
+    if let mc = currentMeshColors {
+      activeColors = mc
+      activeSpeed  = currentMeshSpeed
+    } else if let bg = currentBackgroundGradient {
+      activeColors = bg.colors
+      activeSpeed  = 0.35
+    } else {
+      activeColors = nil
+      activeSpeed  = 0.35
+    }
+
+    let inset = (round && activeColors != nil) ? gradientBackgroundInset : 0
     gradientLeadingConstraint?.constant = inset
     gradientTrailingConstraint?.constant = -inset
     gradientTopConstraint?.constant = inset
     gradientBottomConstraint?.constant = -inset
     gradientBackgroundView.isRound = round
-    gradientBackgroundView.gradient = currentBackgroundGradient
-    guard currentBackgroundGradient != nil else { return }
+    gradientBackgroundView.configure(colors: activeColors ?? [], speed: activeSpeed)
+    guard activeColors != nil else { return }
 
     if !isEnabled {
       gradientBackgroundView.alpha = 0.55

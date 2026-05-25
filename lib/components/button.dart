@@ -9,6 +9,7 @@ import '../channel/params.dart';
 import '../channel/platform_view_modal_visibility.dart';
 import '../style/sf_symbol.dart';
 import '../style/button_style.dart';
+import '../style/mesh_gradient.dart';
 
 const Duration _kCNButtonImplicitAnimationDuration = Duration(milliseconds: 340);
 const Curve _kCNButtonImplicitAnimationCurve = Curves.easeInCubic;
@@ -75,6 +76,7 @@ class CNButton extends StatefulWidget {
     this.tint,
     this.backgroundColor,
     this.backgroundGradient,
+    this.meshGradient,
     this.height = 32.0,
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
@@ -85,7 +87,7 @@ class CNButton extends StatefulWidget {
        round = false;
 
   /// Creates a round, icon-only variant of [CNButton].
-  const CNButton.icon({super.key, this.icon, this.flutterIcon, this.onPressed, this.enabled = true, this.tint, this.backgroundColor, this.backgroundGradient, double size = 44.0, this.style = CNButtonStyle.glass, this.gradientController})
+  const CNButton.icon({super.key, this.icon, this.flutterIcon, this.onPressed, this.enabled = true, this.tint, this.backgroundColor, this.backgroundGradient, this.meshGradient, double size = 44.0, this.style = CNButtonStyle.glass, this.gradientController})
     : assert(icon == null || flutterIcon == null, 'Use either icon (CNSymbol) or flutterIcon (Icon), not both.'),
       assert(icon != null || flutterIcon != null, 'Provide icon (CNSymbol) or flutterIcon (Icon).'),
       label = null,
@@ -122,6 +124,15 @@ class CNButton extends StatefulWidget {
   /// When both [backgroundColor] and [backgroundGradient] are provided,
   /// [backgroundGradient] takes precedence.
   final LinearGradient? backgroundGradient;
+
+  /// Optional animated mesh gradient rendered behind the native button body.
+  ///
+  /// When set, [meshGradient] takes precedence over [backgroundGradient] on
+  /// iOS. The native renderer drives a real-time GPU animation — no Lottie,
+  /// no video, no static gradient.
+  ///
+  /// See [CNButtonMeshGradient] for color palette and speed configuration.
+  final CNButtonMeshGradient? meshGradient;
 
   /// Control height.
   final double height;
@@ -167,6 +178,7 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
   double? _intrinsicWidth;
   CNButtonStyle? _lastStyle;
   String? _lastBackgroundGradientSignature;
+  String? _lastMeshGradientSignature;
   Offset? _downPosition;
   bool _pressed = false;
   bool _gradientChannelReady = false;
@@ -249,7 +261,11 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
       'enabled': (widget.enabled && widget.onPressed != null),
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
-        ..addAll({if (widget.backgroundColor != null) 'backgroundColor': resolveColorToArgb(widget.backgroundColor, context), if (backgroundGradient != null) 'backgroundGradient': backgroundGradient}),
+        ..addAll({
+          if (widget.backgroundColor != null) 'backgroundColor': resolveColorToArgb(widget.backgroundColor, context),
+          if (backgroundGradient != null) 'backgroundGradient': backgroundGradient,
+          if (_encodeMeshGradient() case final mg?) 'meshGradient': mg,
+        }),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
@@ -317,6 +333,7 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
     _lastBackgroundGradientSignature = _backgroundGradientSignature(_encodeBackgroundGradient());
+    _lastMeshGradientSignature = _meshGradientSignature(_encodeMeshGradient());
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
@@ -393,6 +410,12 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     if (_lastBackgroundGradientSignature != backgroundGradientSignature) {
       styleUpdates['backgroundGradient'] = backgroundGradient;
       _lastBackgroundGradientSignature = backgroundGradientSignature;
+    }
+    final meshGradient = _encodeMeshGradient();
+    final meshGradientSignature = _meshGradientSignature(meshGradient);
+    if (_lastMeshGradientSignature != meshGradientSignature) {
+      styleUpdates['meshGradient'] = meshGradient;
+      _lastMeshGradientSignature = meshGradientSignature;
     }
     if (_lastStyle != widget.style) {
       styleUpdates['buttonStyle'] = widget.style.name;
@@ -510,6 +533,20 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
   String? _backgroundGradientSignature(Map<String, dynamic>? gradient) {
     if (gradient == null) return null;
     return jsonEncode(gradient);
+  }
+
+  Map<String, dynamic>? _encodeMeshGradient() {
+    final mg = widget.meshGradient;
+    if (mg == null) return null;
+    return <String, dynamic>{
+      'colors': mg.colors.map((c) => resolveColorToArgb(c, context)!).toList(),
+      'speed': mg.animationSpeed,
+    };
+  }
+
+  String? _meshGradientSignature(Map<String, dynamic>? mg) {
+    if (mg == null) return null;
+    return jsonEncode(mg);
   }
 
   Widget _buildFallbackButton() {
