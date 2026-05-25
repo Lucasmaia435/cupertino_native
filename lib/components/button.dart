@@ -87,15 +87,27 @@ class CNButton extends StatefulWidget {
        round = false;
 
   /// Creates a round, icon-only variant of [CNButton].
-  const CNButton.icon({super.key, this.icon, this.flutterIcon, this.onPressed, this.enabled = true, this.tint, this.backgroundColor, this.backgroundGradient, this.meshGradient, double size = 44.0, this.style = CNButtonStyle.glass, this.gradientController})
-    : assert(icon == null || flutterIcon == null, 'Use either icon (CNSymbol) or flutterIcon (Icon), not both.'),
-      assert(icon != null || flutterIcon != null, 'Provide icon (CNSymbol) or flutterIcon (Icon).'),
-      label = null,
-      round = true,
-      width = size,
-      height = size,
-      shrinkWrap = false,
-      super();
+  const CNButton.icon({
+    super.key,
+    this.icon,
+    this.flutterIcon,
+    this.onPressed,
+    this.enabled = true,
+    this.tint,
+    this.backgroundColor,
+    this.backgroundGradient,
+    this.meshGradient,
+    double size = 44.0,
+    this.style = CNButtonStyle.glass,
+    this.gradientController,
+  }) : assert(icon == null || flutterIcon == null, 'Use either icon (CNSymbol) or flutterIcon (Icon), not both.'),
+       assert(icon != null || flutterIcon != null, 'Provide icon (CNSymbol) or flutterIcon (Icon).'),
+       label = null,
+       round = true,
+       width = size,
+       height = size,
+       shrinkWrap = false,
+       super();
 
   /// Button text (null in icon mode).
   final String? label; // null in icon mode
@@ -436,55 +448,79 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
       final iconName = preIconName;
       final iconSize = preIconSize;
       final iconColor = preIconColor;
-      final updates = <String, dynamic>{};
-      if (iconName != null && (_lastIconName != iconName || _lastIconCodePoint != null)) {
-        updates['buttonIconName'] = iconName;
-        _lastIconName = iconName;
-        _lastIconCodePoint = null;
-        _lastIconFontFamily = null;
-        _lastIconFontPackage = null;
-        _lastIconMatchTextDirection = null;
-      }
-      if (_lastIconSize != iconSize) {
+
+      // Detect whether any icon property changed. The native side reconstructs the
+      // icon image from scratch on every setButtonIcon call, so partial updates
+      // (e.g. color-only) drop any parameter not included — causing the icon to
+      // shrink to the default size, disappear, etc. The fix: send the FULL set of
+      // parameters whenever anything changes.
+      final sfIconChanged = iconName != null &&
+          (_lastIconName != iconName ||
+           _lastIconCodePoint != null ||
+           _lastIconColor != iconColor ||
+           _lastIconSize != iconSize);
+      final flutterIconChanged = preIconCodePoint != null &&
+          (_lastIconCodePoint != preIconCodePoint ||
+           _lastIconFontFamily != preIconFontFamily ||
+           _lastIconFontPackage != preIconFontPackage ||
+           _lastIconMatchTextDirection != preIconMatchTextDirection ||
+           _lastIconName != null ||
+           _lastIconSize != iconSize ||
+           _lastIconColor != iconColor ||
+           _lastIconFill != preIconFill ||
+           _lastIconWeight != preIconWeight ||
+           _lastIconGrade != preIconGrade ||
+           _lastIconOpticalSize != preIconOpticalSize);
+
+      if (sfIconChanged || flutterIconChanged) {
+        final updates = <String, dynamic>{};
+
+        // SF Symbol source
+        if (iconName != null) {
+          updates['buttonIconName'] = iconName;
+          _lastIconName = iconName;
+          _lastIconCodePoint = null;
+          _lastIconFontFamily = null;
+          _lastIconFontPackage = null;
+          _lastIconMatchTextDirection = null;
+        }
+
+        // Always include size and color so native rebuilds the image correctly
         updates['buttonIconSize'] = iconSize;
-        _lastIconSize = iconSize;
-      }
-      if (_lastIconColor != iconColor) {
         updates['buttonIconColor'] = iconColor;
+        _lastIconSize = iconSize;
         _lastIconColor = iconColor;
-      }
-      final iconDataChanged =
-          _lastIconCodePoint != preIconCodePoint || _lastIconFontFamily != preIconFontFamily || _lastIconFontPackage != preIconFontPackage || _lastIconMatchTextDirection != preIconMatchTextDirection || _lastIconName != null;
-      final iconDataStyleChanged = _lastIconFill != preIconFill || _lastIconWeight != preIconWeight || _lastIconGrade != preIconGrade || _lastIconOpticalSize != preIconOpticalSize;
-      if ((iconDataChanged || iconDataStyleChanged) && preIconCodePoint != null) {
-        updates['buttonIconDataCodePoint'] = preIconCodePoint;
-        updates['buttonIconDataFontFamily'] = preIconFontFamily;
-        updates['buttonIconDataFontPackage'] = preIconFontPackage;
-        updates['buttonIconDataMatchTextDirection'] = preIconMatchTextDirection ?? false;
-        updates['buttonIconDataFill'] = preIconFill;
-        updates['buttonIconDataWeight'] = preIconWeight;
-        updates['buttonIconDataGrade'] = preIconGrade;
-        updates['buttonIconDataOpticalSize'] = preIconOpticalSize;
-        _lastIconCodePoint = preIconCodePoint;
-        _lastIconFontFamily = preIconFontFamily;
-        _lastIconFontPackage = preIconFontPackage;
-        _lastIconMatchTextDirection = preIconMatchTextDirection;
-        _lastIconFill = preIconFill;
-        _lastIconWeight = preIconWeight;
-        _lastIconGrade = preIconGrade;
-        _lastIconOpticalSize = preIconOpticalSize;
-        _lastIconName = null;
-      }
-      if (widget.icon?.mode != null) {
-        updates['buttonIconRenderingMode'] = widget.icon!.mode!.name;
-      }
-      if (widget.icon?.paletteColors != null) {
-        updates['buttonIconPaletteColors'] = widget.icon!.paletteColors!.map((c) => resolveColorToArgb(c, context)).toList();
-      }
-      if (widget.icon?.gradient != null) {
-        updates['buttonIconGradientEnabled'] = widget.icon!.gradient;
-      }
-      if (updates.isNotEmpty) {
+
+        // Flutter IconData source
+        if (preIconCodePoint != null) {
+          updates['buttonIconDataCodePoint'] = preIconCodePoint;
+          updates['buttonIconDataFontFamily'] = preIconFontFamily;
+          updates['buttonIconDataFontPackage'] = preIconFontPackage;
+          updates['buttonIconDataMatchTextDirection'] = preIconMatchTextDirection ?? false;
+          updates['buttonIconDataFill'] = preIconFill;
+          updates['buttonIconDataWeight'] = preIconWeight;
+          updates['buttonIconDataGrade'] = preIconGrade;
+          updates['buttonIconDataOpticalSize'] = preIconOpticalSize;
+          _lastIconCodePoint = preIconCodePoint;
+          _lastIconFontFamily = preIconFontFamily;
+          _lastIconFontPackage = preIconFontPackage;
+          _lastIconMatchTextDirection = preIconMatchTextDirection;
+          _lastIconFill = preIconFill;
+          _lastIconWeight = preIconWeight;
+          _lastIconGrade = preIconGrade;
+          _lastIconOpticalSize = preIconOpticalSize;
+          _lastIconName = null;
+        }
+
+        if (widget.icon?.mode != null) {
+          updates['buttonIconRenderingMode'] = widget.icon!.mode!.name;
+        }
+        if (widget.icon?.paletteColors != null) {
+          updates['buttonIconPaletteColors'] = widget.icon!.paletteColors!.map((c) => resolveColorToArgb(c, context)).toList();
+        }
+        if (widget.icon?.gradient != null) {
+          updates['buttonIconGradientEnabled'] = widget.icon!.gradient;
+        }
         await ch.invokeMethod('setButtonIcon', updates);
       }
     }
@@ -538,10 +574,7 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
   Map<String, dynamic>? _encodeMeshGradient() {
     final mg = widget.meshGradient;
     if (mg == null) return null;
-    return <String, dynamic>{
-      'colors': mg.colors.map((c) => resolveColorToArgb(c, context)!).toList(),
-      'speed': mg.animationSpeed,
-    };
+    return <String, dynamic>{'colors': mg.colors.map((c) => resolveColorToArgb(c, context)!).toList(), 'speed': mg.animationSpeed};
   }
 
   String? _meshGradientSignature(Map<String, dynamic>? mg) {
