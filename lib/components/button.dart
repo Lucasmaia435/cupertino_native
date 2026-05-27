@@ -14,6 +14,54 @@ import '../style/mesh_gradient.dart';
 const Duration _kCNButtonImplicitAnimationDuration = Duration(milliseconds: 340);
 const Curve _kCNButtonImplicitAnimationCurve = Curves.easeInCubic;
 
+/// Controls the mesh-gradient opacity animation of a [CNButton] from outside
+/// the widget tree. Obtain an instance, pass it via [CNButton.meshGradientController],
+/// then call [animateTo] to fade the mesh gradient in or out using a native
+/// CABasicAnimation on iOS.
+class CNButtonMeshGradientController {
+  _CNButtonState? _attachedState;
+  _PendingMeshGradientAnim? _pending;
+
+  /// Animate the button's mesh gradient to [meshGradient] over [duration].
+  /// Pass `null` to fade the gradient out.
+  /// [curve] accepts `'easeInCubic'` or `'easeOut'`.
+  void animateTo({required CNButtonMeshGradient? meshGradient, required Duration duration, String curve = 'easeOut'}) {
+    final state = _attachedState;
+    if (state == null || !state._gradientChannelReady) {
+      _pending = _PendingMeshGradientAnim(meshGradient: meshGradient, duration: duration, curve: curve);
+      return;
+    }
+    _pending = null;
+    state._animateMeshGradient(meshGradient: meshGradient, duration: duration, curve: curve);
+  }
+
+  void _attach(_CNButtonState state) => _attachedState = state;
+
+  void _detach(_CNButtonState state) {
+    if (_attachedState == state) _attachedState = null;
+  }
+
+  void _onChannelReady() {
+    final pending = _pending;
+    if (pending != null && _attachedState != null) {
+      _pending = null;
+      _attachedState!._animateMeshGradient(meshGradient: pending.meshGradient, duration: pending.duration, curve: pending.curve);
+    }
+  }
+
+  void dispose() {
+    _attachedState = null;
+    _pending = null;
+  }
+}
+
+class _PendingMeshGradientAnim {
+  const _PendingMeshGradientAnim({required this.meshGradient, required this.duration, required this.curve});
+  final CNButtonMeshGradient? meshGradient;
+  final Duration duration;
+  final String curve;
+}
+
 /// Controls the background-gradient animation of a [CNButton] from outside
 /// the widget tree. Obtain an instance, pass it to [CNButton.icon] via
 /// [CNButton.gradientController], then call [animateTo] to start a native
@@ -81,6 +129,7 @@ class CNButton extends StatefulWidget {
     this.shrinkWrap = false,
     this.style = CNButtonStyle.plain,
     this.gradientController,
+    this.meshGradientController,
   }) : icon = null,
        flutterIcon = null,
        width = null,
@@ -100,6 +149,7 @@ class CNButton extends StatefulWidget {
     double size = 44.0,
     this.style = CNButtonStyle.glass,
     this.gradientController,
+    this.meshGradientController,
   }) : assert(icon == null || flutterIcon == null, 'Use either icon (CNSymbol) or flutterIcon (Icon), not both.'),
        assert(icon != null || flutterIcon != null, 'Provide icon (CNSymbol) or flutterIcon (Icon).'),
        label = null,
@@ -160,6 +210,9 @@ class CNButton extends StatefulWidget {
   /// Optional controller for triggering native gradient animations.
   final CNButtonGradientController? gradientController;
 
+  /// Optional controller for animating the mesh gradient in and out.
+  final CNButtonMeshGradientController? meshGradientController;
+
   /// Whether the icon variant (round) is used.
   final bool round;
 
@@ -191,6 +244,7 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
   CNButtonStyle? _lastStyle;
   String? _lastBackgroundGradientSignature;
   String? _lastMeshGradientSignature;
+  bool? _lastEnabled;
   Offset? _downPosition;
   bool _pressed = false;
   bool _gradientChannelReady = false;
@@ -213,6 +267,7 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
   void dispose() {
     _channel?.setMethodCallHandler(null);
     widget.gradientController?._detach(this);
+    widget.meshGradientController?._detach(this);
     super.dispose();
   }
 
@@ -222,6 +277,10 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     if (oldWidget.gradientController != widget.gradientController) {
       oldWidget.gradientController?._detach(this);
       widget.gradientController?._attach(this);
+    }
+    if (oldWidget.meshGradientController != widget.meshGradientController) {
+      oldWidget.meshGradientController?._detach(this);
+      widget.meshGradientController?._attach(this);
     }
     _syncPropsToNativeIfNeeded();
   }
@@ -346,6 +405,7 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     _lastBackground = resolveColorToArgb(widget.backgroundColor, context);
     _lastBackgroundGradientSignature = _backgroundGradientSignature(_encodeBackgroundGradient());
     _lastMeshGradientSignature = _meshGradientSignature(_encodeMeshGradient());
+    _lastEnabled = widget.enabled && widget.onPressed != null;
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
@@ -366,6 +426,8 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     _gradientChannelReady = true;
     widget.gradientController?._attach(this);
     widget.gradientController?._onChannelReady();
+    widget.meshGradientController?._attach(this);
+    widget.meshGradientController?._onChannelReady();
   }
 
   Future<dynamic> _onMethodCall(MethodCall call) async {
@@ -426,8 +488,13 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     final meshGradient = _encodeMeshGradient();
     final meshGradientSignature = _meshGradientSignature(meshGradient);
     if (_lastMeshGradientSignature != meshGradientSignature) {
-      styleUpdates['meshGradient'] = meshGradient;
       _lastMeshGradientSignature = meshGradientSignature;
+      final appearing = widget.meshGradient != null;
+      _animateMeshGradient(
+        meshGradient: widget.meshGradient,
+        duration: appearing ? const Duration(milliseconds: 600) : const Duration(milliseconds: 400),
+        curve: appearing ? 'easeOut' : 'easeInCubic',
+      );
     }
     if (_lastStyle != widget.style) {
       styleUpdates['buttonStyle'] = widget.style.name;
@@ -436,8 +503,12 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     if (styleUpdates.isNotEmpty) {
       await ch.invokeMethod('setStyle', styleUpdates);
     }
-    // Enabled state
-    await ch.invokeMethod('setEnabled', {'enabled': (widget.enabled && widget.onPressed != null)});
+    // Enabled state — only sync when the value actually changed
+    final enabled = widget.enabled && widget.onPressed != null;
+    if (_lastEnabled != enabled) {
+      _lastEnabled = enabled;
+      await ch.invokeMethod('setEnabled', {'enabled': enabled});
+    }
     if (_lastTitle != widget.label && widget.label != null) {
       await ch.invokeMethod('setButtonTitle', {'title': widget.label});
       _lastTitle = widget.label;
@@ -622,6 +693,16 @@ class _CNButtonState extends State<CNButton> with CNPlatformViewModalVisibility<
     final ch = _channel;
     if (ch == null) return;
     ch.invokeMethod<void>('animateGradient', <String, dynamic>{'gradient': _encodeGradient(gradient), 'durationMs': duration.inMilliseconds, 'curve': curve});
+  }
+
+  void _animateMeshGradient({required CNButtonMeshGradient? meshGradient, required Duration duration, String curve = 'easeOut'}) {
+    final ch = _channel;
+    if (ch == null) return;
+    Map<String, dynamic>? encoded;
+    if (meshGradient != null) {
+      encoded = {'colors': meshGradient.colors.map((c) => resolveColorToArgb(c, context)!).toList(), 'speed': meshGradient.animationSpeed};
+    }
+    ch.invokeMethod<void>('animateMeshGradient', <String, dynamic>{'meshGradient': encoded, 'durationMs': duration.inMilliseconds, 'curve': curve});
   }
 
   Map<String, dynamic>? _encodeGradient(LinearGradient? gradient) {

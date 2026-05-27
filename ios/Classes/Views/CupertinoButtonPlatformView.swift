@@ -172,6 +172,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     if #available(iOS 13.0, *) { container.overrideUserInterfaceStyle = isDark ? .dark : .light }
 
     gradientBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+    gradientBackgroundView.layer.opacity = 0
     button.translatesAutoresizingMaskIntoConstraints = false
     aiGradientView.translatesAutoresizingMaskIntoConstraints = false
     aiGradientView.layer.opacity = 0
@@ -436,6 +437,84 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
             guard let self else { return }
             if self.aiGradientView.layer.opacity < 0.01 {
               self.aiGradientView.gradient = nil
+            }
+          }
+        }
+        result(nil)
+      case "animateMeshGradient":
+        guard let args = call.arguments as? [String: Any] else {
+          result(FlutterError(code: "bad_args", message: "Expected [String: Any]", details: nil))
+          return
+        }
+        let durationMs = (args["durationMs"] as? NSNumber)?.doubleValue ?? 300.0
+        let duration = durationMs / 1000.0
+        let curveType = args["curve"] as? String ?? "easeOut"
+        let targetMesh: ([UIColor], Double)? = {
+          guard let mgDict = args["meshGradient"] as? [String: Any],
+                let colors = Self.meshColorsFromDict(mgDict) else { return nil }
+          let speed = (mgDict["speed"] as? NSNumber)?.doubleValue ?? 0.35
+          return (colors, speed)
+        }()
+        let meshTargetOpacity: Float = targetMesh != nil ? 1.0 : 0.0
+
+        if let (colors, speed) = targetMesh {
+          // If the view was hidden (opacity stale from a prior setStyle), reset to 0
+          // so the fade-in starts from transparent.
+          if self.gradientBackgroundView.isHidden {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.gradientBackgroundView.layer.opacity = 0
+            CATransaction.commit()
+          }
+          // Update state so updateGradientBackground keeps the view configured.
+          self.currentMeshColors = colors
+          self.currentMeshSpeed = speed
+          self.gradientBackgroundView.configure(colors: colors, speed: speed)
+          self.gradientBackgroundView.isRound = self.isRoundButton
+        }
+        // For fade-out: keep currentMeshColors intact during the animation so that
+        // any updateGradientBackground call doesn't call configure(colors:[]) early
+        // and cut the fade short. State is cleared in the asyncAfter block below.
+
+        let meshCurrentOpacity = self.gradientBackgroundView.layer.presentation()?.opacity
+          ?? self.gradientBackgroundView.layer.opacity
+
+        let meshTimingFunction: CAMediaTimingFunction
+        switch curveType {
+        case "easeInCubic":
+          meshTimingFunction = CAMediaTimingFunction(
+            controlPoints:
+              Float(self.implicitAnimationControlPoint1.x),
+              Float(self.implicitAnimationControlPoint1.y),
+              Float(self.implicitAnimationControlPoint2.x),
+              Float(self.implicitAnimationControlPoint2.y)
+          )
+        default:
+          meshTimingFunction = CAMediaTimingFunction(name: .easeOut)
+        }
+
+        let meshAnimation = CABasicAnimation(keyPath: "opacity")
+        meshAnimation.fromValue = meshCurrentOpacity
+        meshAnimation.toValue = meshTargetOpacity
+        meshAnimation.duration = duration
+        meshAnimation.timingFunction = meshTimingFunction
+        meshAnimation.fillMode = .forwards
+        meshAnimation.isRemovedOnCompletion = true
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.gradientBackgroundView.layer.opacity = meshTargetOpacity
+        CATransaction.commit()
+
+        self.gradientBackgroundView.layer.add(meshAnimation, forKey: "meshGradientOpacity")
+
+        if targetMesh == nil {
+          DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self else { return }
+            if self.gradientBackgroundView.layer.opacity < 0.01 {
+              self.currentMeshColors = nil
+              self.currentMeshSpeed = 0.35
+              self.gradientBackgroundView.configure(colors: [], speed: 0.35)
             }
           }
         }
@@ -862,6 +941,9 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     gradientBackgroundView.configure(colors: activeColors ?? [], speed: activeSpeed)
     guard activeColors != nil else { return }
 
+    // Don't override the mesh fade animation with an immediate alpha change.
+    guard gradientBackgroundView.layer.animation(forKey: "meshGradientOpacity") == nil else { return }
+
     if !isEnabled {
       gradientBackgroundView.alpha = 0.55
     } else {
@@ -891,7 +973,11 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
 
     container.layoutIfNeeded()
     addFadeTransition(to: button.layer)
-    addFadeTransition(to: gradientBackgroundView.layer)
+    // Skip the CATransition on gradientBackgroundView while a mesh opacity
+    // animation is running — the CATransition would compete with CABasicAnimation.
+    if gradientBackgroundView.layer.animation(forKey: "meshGradientOpacity") == nil {
+      addFadeTransition(to: gradientBackgroundView.layer)
+    }
     let timing = UICubicTimingParameters(
       controlPoint1: implicitAnimationControlPoint1,
       controlPoint2: implicitAnimationControlPoint2
