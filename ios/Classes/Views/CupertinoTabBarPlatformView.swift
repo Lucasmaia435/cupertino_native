@@ -34,6 +34,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentIconGrades: [CGFloat?] = []
   private var currentIconOpticalSizes: [CGFloat?] = []
   private var currentSizes: [CGFloat?] = []
+  private var currentBadges: [String?] = []
   private var currentTintColor: UIColor? = nil
   private var currentBackgroundColor: UIColor? = nil
 
@@ -59,6 +60,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       currentIconGrades = Self.parseOptionalDoubleArray(dict["iconDataGrades"])
       currentIconOpticalSizes = Self.parseOptionalDoubleArray(dict["iconDataOpticalSizes"])
       currentSizes = Self.parseOptionalDoubleArray(dict["sfSymbolSizes"])
+      currentBadges = Self.parseOptionalStringArray(dict["badgeValues"])
       if let value = dict["selectedIndex"] as? NSNumber { selectedIndex = value.intValue }
       if let value = dict["isDark"] as? NSNumber { isDark = value.boolValue }
       if let style = dict["style"] as? [String: Any] {
@@ -111,11 +113,21 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           self.currentIconGrades = Self.parseOptionalDoubleArray(params["iconDataGrades"])
           self.currentIconOpticalSizes = Self.parseOptionalDoubleArray(params["iconDataOpticalSizes"])
           self.currentSizes = Self.parseOptionalDoubleArray(params["sfSymbolSizes"])
+          self.currentBadges = Self.parseOptionalStringArray(params["badgeValues"])
           let selectedIndex = (params["selectedIndex"] as? NSNumber)?.intValue ?? 0
           self.rebuildBars(selectedIndex: selectedIndex)
           result(nil)
         } else {
           result(FlutterError(code: "bad_args", message: "Missing items", details: nil))
+        }
+      case "setItemBadge":
+        if let params = call.arguments as? [String: Any],
+           let index = (params["index"] as? NSNumber)?.intValue {
+          let value = params["badgeValue"] as? String
+          self.updateItemBadge(at: index, value: value)
+          result(nil)
+        } else {
+          result(FlutterError(code: "bad_args", message: "Missing badge args", details: nil))
         }
       case "setItemIconStyle":
         if let params = call.arguments as? [String: Any],
@@ -355,6 +367,32 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     }
   }
 
+  private func updateItemBadge(at index: Int, value: String?) {
+    guard index >= 0 else { return }
+    if currentBadges.count <= index {
+      currentBadges.append(contentsOf: Array(repeating: nil, count: index - currentBadges.count + 1))
+    }
+    currentBadges[index] = value
+    let badgeValue = value
+
+    if let bar = tabBar, let items = bar.items, index < items.count {
+      items[index].badgeValue = badgeValue
+      return
+    }
+    if let left = tabBarLeft, let leftItems = left.items {
+      if index < leftItems.count {
+        leftItems[index].badgeValue = badgeValue
+        return
+      }
+      if let right = tabBarRight, let rightItems = right.items {
+        let rightIndex = index - leftItems.count
+        if rightIndex >= 0, rightIndex < rightItems.count {
+          rightItems[rightIndex].badgeValue = badgeValue
+        }
+      }
+    }
+  }
+
   private func updateItemIconStyle(at index: Int, params: [String: Any]) {
     guard index >= 0 else { return }
     ensureStyleCapacity(index: index)
@@ -425,6 +463,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       let item = UITabBarItem(title: title, image: image, selectedImage: image)
       item.setTitleTextAttributes(normalAttrs, for: .normal)
       item.setTitleTextAttributes(selectedAttrs, for: .selected)
+      // An empty string (rather than a digit) renders as a plain red dot with no text inside it.
+      item.badgeValue = index < currentBadges.count ? currentBadges[index] : nil
       items.append(item)
     }
     return items

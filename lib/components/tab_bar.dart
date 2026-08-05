@@ -9,11 +9,15 @@ import '../style/sf_symbol.dart';
 /// Immutable data describing a single tab bar item.
 class CNTabBarItem {
   /// Creates a tab bar item description.
-  const CNTabBarItem({this.label, this.icon, this.flutterIcon})
-    : assert(
-        icon == null || flutterIcon == null,
-        'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
-      );
+  const CNTabBarItem({
+    this.label,
+    this.icon,
+    this.flutterIcon,
+    this.badgeValue,
+  }) : assert(
+         icon == null || flutterIcon == null,
+         'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
+       );
 
   /// Optional tab item label.
   final String? label;
@@ -25,6 +29,10 @@ class CNTabBarItem {
   ///
   /// This allows variable-font properties like fill/weight.
   final Icon? flutterIcon;
+
+  /// Badge shown on this item, or null for no badge. An empty string renders as a plain red
+  /// dot with no text; any other value (e.g. "1") is displayed inside the badge.
+  final String? badgeValue;
 }
 
 /// A Cupertino-native tab bar. Uses native UITabBar/NSTabView style visuals.
@@ -97,6 +105,7 @@ class _CNTabBarState extends State<CNTabBar>
   List<String?>? _lastIconFontPackages;
   List<bool>? _lastIconMatchTextDirections;
   List<double?>? _lastSizes;
+  List<String?>? _lastBadges;
   List<double?>? _lastIconFills;
   List<double?>? _lastIconWeights;
   List<double?>? _lastIconGrades;
@@ -193,6 +202,7 @@ class _CNTabBarState extends State<CNTabBar>
     final iconOpticalSizes = widget.items
         .map((e) => _itemIconOpticalSize(e))
         .toList();
+    final badges = widget.items.map((e) => e.badgeValue).toList();
     final colors = widget.items
         .map(
           (e) => resolveColorToArgb(
@@ -215,6 +225,7 @@ class _CNTabBarState extends State<CNTabBar>
       'iconDataOpticalSizes': iconOpticalSizes,
       'sfSymbolSizes': sizes,
       'sfSymbolColors': colors,
+      'badgeValues': badges,
       'selectedIndex': widget.currentIndex,
       'isDark': _isDark,
       'split': widget.split,
@@ -328,6 +339,7 @@ class _CNTabBarState extends State<CNTabBar>
     final iconOpticalSizes = widget.items
         .map((e) => _itemIconOpticalSize(e))
         .toList();
+    final badges = widget.items.map((e) => e.badgeValue).toList();
     final itemsStructureChanged =
         _listSignature(_lastLabels) != _listSignature(labels) ||
         _listSignature(_lastSymbols) != _listSignature(symbols) ||
@@ -358,6 +370,7 @@ class _CNTabBarState extends State<CNTabBar>
         'iconDataGrades': iconGrades,
         'iconDataOpticalSizes': iconOpticalSizes,
         'sfSymbolSizes': sizes,
+        'badgeValues': badges,
         'selectedIndex': widget.currentIndex,
       });
       _cacheItems();
@@ -388,6 +401,22 @@ class _CNTabBarState extends State<CNTabBar>
       _lastIconWeights = iconWeights;
       _lastIconGrades = iconGrades;
       _lastIconOpticalSizes = iconOpticalSizes;
+    }
+
+    // Badge updates. Independent of the structure/icon-style branches above so a badge can be
+    // toggled (e.g. a check-in becoming due) without waiting on any other item property to change.
+    // Skipped when itemsStructureChanged already sent the current badges via setItems above.
+    if (!itemsStructureChanged &&
+        _listSignature(_lastBadges) != _listSignature(badges)) {
+      final itemCount = widget.items.length;
+      for (var i = 0; i < itemCount; i++) {
+        if (_listValueAt(_lastBadges, i) == _listValueAt(badges, i)) continue;
+        await ch.invokeMethod('setItemBadge', {
+          'index': i,
+          'badgeValue': badges[i],
+        });
+      }
+      _lastBadges = badges;
     }
 
     // Layout updates (split / insets)
@@ -446,6 +475,7 @@ class _CNTabBarState extends State<CNTabBar>
     _lastIconOpticalSizes = widget.items
         .map((e) => _itemIconOpticalSize(e))
         .toList();
+    _lastBadges = widget.items.map((e) => e.badgeValue).toList();
   }
 
   String _listSignature(List<dynamic>? values) {
