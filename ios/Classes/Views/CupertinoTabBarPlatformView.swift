@@ -115,7 +115,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           self.currentSizes = Self.parseOptionalDoubleArray(params["sfSymbolSizes"])
           self.currentBadges = Self.parseOptionalStringArray(params["badgeValues"])
           let selectedIndex = (params["selectedIndex"] as? NSNumber)?.intValue ?? 0
-          self.rebuildBars(selectedIndex: selectedIndex)
+          if !self.updateItemsInPlace(selectedIndex: selectedIndex) {
+            self.rebuildBars(selectedIndex: selectedIndex)
+          }
+          self.forceLayoutPass()
           result(nil)
         } else {
           result(FlutterError(code: "bad_args", message: "Missing items", details: nil))
@@ -175,7 +178,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         }
       case "setVisible":
         if let params = call.arguments as? [String: Any], let visible = (params["visible"] as? NSNumber)?.boolValue {
+          let wasHidden = self.container.isHidden
           self.container.isHidden = !visible
+          if visible && wasHidden {
+            self.forceLayoutPass()
+          }
           result(nil)
         } else {
           result(FlutterError(code: "bad_args", message: "Missing visible", details: nil))
@@ -294,6 +301,63 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       bar.topAnchor.constraint(equalTo: container.topAnchor),
       bar.bottomAnchor.constraint(equalTo: container.bottomAnchor)
     ])
+  }
+
+  /// Updates existing UITabBarItems in place instead of recreating the UITabBar(s).
+  /// Returns false when the item count or split layout changed, so the caller
+  /// should fall back to a full `rebuildBars`.
+  private func updateItemsInPlace(selectedIndex: Int) -> Bool {
+    let count = totalItemCount()
+    let shouldSplit = isSplit && count > rightCountVal
+
+    if shouldSplit {
+      let leftEnd = count - rightCountVal
+      guard tabBar == nil,
+            let left = tabBarLeft, let right = tabBarRight,
+            let leftItems = left.items, leftItems.count == leftEnd,
+            let rightItems = right.items, rightItems.count == count - leftEnd
+      else {
+        return false
+      }
+      applyItemContent(leftItems, startingAt: 0)
+      applyItemContent(rightItems, startingAt: leftEnd)
+    } else {
+      guard tabBarLeft == nil, tabBarRight == nil,
+            let bar = tabBar, let items = bar.items, items.count == count
+      else {
+        return false
+      }
+      applyItemContent(items, startingAt: 0)
+    }
+
+    applySelection(selectedIndex: selectedIndex)
+    return true
+  }
+
+  private func applyItemContent(_ items: [UITabBarItem], startingAt offset: Int) {
+    for (relativeIndex, item) in items.enumerated() {
+      let index = offset + relativeIndex
+      item.title = index < currentLabels.count ? currentLabels[index] : nil
+      let image = imageForItem(index)
+      item.image = image
+      item.selectedImage = image
+      // An empty string (rather than a digit) renders as a plain red dot with no text inside it.
+      item.badgeValue = index < currentBadges.count ? currentBadges[index] : nil
+    }
+  }
+
+  /// UIKit skips layout for hidden views, so a tab bar rebuilt or updated while
+  /// the container is hidden can stay unlaid-out once it becomes visible again.
+  /// Call this after item updates and whenever visibility is restored.
+  private func forceLayoutPass() {
+    container.setNeedsLayout()
+    container.layoutIfNeeded()
+    tabBar?.setNeedsLayout()
+    tabBar?.layoutIfNeeded()
+    tabBarLeft?.setNeedsLayout()
+    tabBarLeft?.layoutIfNeeded()
+    tabBarRight?.setNeedsLayout()
+    tabBarRight?.layoutIfNeeded()
   }
 
   private func applyStyle(to tabBar: UITabBar) {
