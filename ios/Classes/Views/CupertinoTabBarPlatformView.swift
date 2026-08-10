@@ -86,6 +86,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     }
 
     rebuildBars(selectedIndex: selectedIndex)
+    // On iOS 26, UIKit only computes correct item label layout (unselected labels visible,
+    // selected label unclipped) as the result of a genuine on-screen selection *transition* —
+    // a real display commit between two different `selectedItem` values — and only for the
+    // item(s) involved in that transition. A `UITabBarItem` assigned `selectedItem` once during
+    // initial setup never gets one, so it renders with unselected labels hidden and the selected
+    // label truncated. Cycle through every item once to give each of them that transition, with
+    // `container` hidden throughout so none of it is visible, landing on the real selection.
+    container.isHidden = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+      self?.cycleThroughAllItemsThenReveal(selectedIndex: selectedIndex)
+    }
 
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else {
@@ -361,15 +372,19 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   }
 
   private func applyStyle(to tabBar: UITabBar) {
-    if let color = currentBackgroundColor { tabBar.barTintColor = color }
     if #available(iOS 10.0, *), let color = currentTintColor { tabBar.tintColor = color }
     if #available(iOS 13.0, *) {
       let appearance = UITabBarAppearance()
       appearance.configureWithDefaultBackground()
+      // `barTintColor` is silently ignored once `standardAppearance` is set, so the custom
+      // background color must be applied on the appearance object itself to take effect.
+      if let color = currentBackgroundColor { appearance.backgroundColor = color }
       tabBar.standardAppearance = appearance
       if #available(iOS 15.0, *) {
         tabBar.scrollEdgeAppearance = appearance
       }
+    } else if let color = currentBackgroundColor {
+      tabBar.barTintColor = color
     }
   }
 
@@ -408,6 +423,43 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       width: ceil(contentBounds.width),
       height: max(ceil(contentBounds.height), fallbackSize.height)
     )
+  }
+
+  /// Selects each item in turn (each with a real display commit before moving to the next, since
+  /// two `selectedItem` assignments with no display in between render identically to never
+  /// having changed it at all), landing on `selectedIndex` last, then reveals `container`.
+  /// `container` must already be hidden by the caller so this cycle is never visible — the reveal
+  /// itself is deferred by one more step interval so the final selection's own slide animation
+  /// has time to settle before anything becomes visible.
+  private func cycleThroughAllItemsThenReveal(selectedIndex: Int) {
+    guard let bar = tabBar, let items = bar.items, !items.isEmpty,
+          selectedIndex >= 0, selectedIndex < items.count else {
+      container.isHidden = false
+      return
+    }
+    // UIKit auto-selects item 0 as soon as `.items` is assigned, so visiting index 0 first would
+    // reassign the same value it already holds — not a real transition. Visit every other index
+    // first, then land on 0 (still a real transition if `selectedIndex` isn't 0), so every item
+    // is reached via a genuine change; append `selectedIndex` itself if it wasn't already last.
+    var order = Array(1..<items.count) + [0]
+    if order.last != selectedIndex {
+      order.append(selectedIndex)
+    }
+    step(bar: bar, items: items, order: order, position: 0)
+  }
+
+  private func step(bar: UITabBar, items: [UITabBarItem], order: [Int], position: Int) {
+    guard position < order.count else {
+      forceLayoutPass()
+      container.isHidden = false
+      return
+    }
+    bar.selectedItem = items[order[position]]
+    bar.setNeedsLayout()
+    bar.layoutIfNeeded()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+      self?.step(bar: bar, items: items, order: order, position: position + 1)
+    }
   }
 
   private func applySelection(selectedIndex: Int) {
