@@ -13,7 +13,8 @@ class CNTabBarItem {
     this.label,
     this.icon,
     this.flutterIcon,
-    this.badgeValue,
+    this.showBadge = false,
+    this.badgeLabel,
   }) : assert(
          icon == null || flutterIcon == null,
          'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
@@ -30,9 +31,16 @@ class CNTabBarItem {
   /// This allows variable-font properties like fill/weight.
   final Icon? flutterIcon;
 
-  /// Badge shown on this item, or null for no badge. An empty string renders as a plain red
-  /// dot with no text; any other value (e.g. "1") is displayed inside the badge.
-  final String? badgeValue;
+  /// Whether a badge is shown on this item.
+  final bool showBadge;
+
+  /// Text shown inside the badge. Ignored unless [showBadge] is true. If null, the badge
+  /// renders as a plain dot with no text.
+  final String? badgeLabel;
+
+  /// The value sent to the native badge, or null for no badge. A single space renders as a
+  /// plain dot with no text; any other value (e.g. "1") is displayed inside the badge.
+  String? get _effectiveBadgeValue => showBadge ? (badgeLabel ?? ' ') : null;
 }
 
 /// A Cupertino-native tab bar. Uses native UITabBar/NSTabView style visuals.
@@ -202,7 +210,7 @@ class _CNTabBarState extends State<CNTabBar>
     final iconOpticalSizes = widget.items
         .map((e) => _itemIconOpticalSize(e))
         .toList();
-    final badges = widget.items.map((e) => e.badgeValue).toList();
+    final badges = widget.items.map((e) => e._effectiveBadgeValue).toList();
     final colors = widget.items
         .map(
           (e) => resolveColorToArgb(
@@ -339,7 +347,7 @@ class _CNTabBarState extends State<CNTabBar>
     final iconOpticalSizes = widget.items
         .map((e) => _itemIconOpticalSize(e))
         .toList();
-    final badges = widget.items.map((e) => e.badgeValue).toList();
+    final badges = widget.items.map((e) => e._effectiveBadgeValue).toList();
     final itemsStructureChanged =
         _listSignature(_lastLabels) != _listSignature(labels) ||
         _listSignature(_lastSymbols) != _listSignature(symbols) ||
@@ -475,7 +483,7 @@ class _CNTabBarState extends State<CNTabBar>
     _lastIconOpticalSizes = widget.items
         .map((e) => _itemIconOpticalSize(e))
         .toList();
-    _lastBadges = widget.items.map((e) => e.badgeValue).toList();
+    _lastBadges = widget.items.map((e) => e._effectiveBadgeValue).toList();
   }
 
   String _listSignature(List<dynamic>? values) {
