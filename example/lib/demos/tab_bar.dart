@@ -60,7 +60,8 @@ class _TabBarDemoPageState extends State<TabBarDemoPage> with SingleTickerProvid
                 CNTabBarItem(
                   label: 'Profile',
                   flutterIcon: Icon(Icons.person_outline, fill: _index == 1 ? 1 : 0, size: 24),
-                  badgeValue: "1",
+                  showBadge: true,
+                  badgeLabel: "1",
                 ),
                 CNTabBarItem(
                   label: 'Settings',
