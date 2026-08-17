@@ -38,6 +38,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentTintColor: UIColor? = nil
   private var currentBackgroundColor: UIColor? = nil
 
+  // While true, `container` is being kept hidden for the initial item-cycling workaround below,
+  // and any `setVisible` calls arriving from Flutter in the meantime must not unhide it early —
+  // they only update `pendingExternalVisible`, applied once the cycle finishes.
+  private var initialRevealPending: Bool = true
+  private var pendingExternalVisible: Bool = true
+
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(
       name: "CupertinoNativeTabBar_\(viewId)",
@@ -189,6 +195,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         }
       case "setVisible":
         if let params = call.arguments as? [String: Any], let visible = (params["visible"] as? NSNumber)?.boolValue {
+          self.pendingExternalVisible = visible
+          if self.initialRevealPending {
+            // Defer to the reveal at the end of the cycle so it isn't shown early mid-dance.
+            result(nil)
+            return
+          }
           let wasHidden = self.container.isHidden
           self.container.isHidden = !visible
           if visible && wasHidden {
@@ -379,6 +391,21 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       // `barTintColor` is silently ignored once `standardAppearance` is set, so the custom
       // background color must be applied on the appearance object itself to take effect.
       if let color = currentBackgroundColor { appearance.backgroundColor = color }
+      // A smaller badge font shrinks the badge pill itself (it sizes to fit its text/padding,
+      // even for the empty string used to render a plain dot), and pulling it further left/down
+      // from its default position tucks it over the icon's corner instead of floating beside it.
+      let badgeTextAttributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 4)]
+      let badgePositionAdjustment = UIOffset(horizontal: 12, vertical: 4)
+      for itemAppearance in [
+        appearance.stackedLayoutAppearance,
+        appearance.inlineLayoutAppearance,
+        appearance.compactInlineLayoutAppearance,
+      ] {
+        itemAppearance.normal.badgeTextAttributes = badgeTextAttributes
+        itemAppearance.selected.badgeTextAttributes = badgeTextAttributes
+        itemAppearance.normal.badgePositionAdjustment = badgePositionAdjustment
+        itemAppearance.selected.badgePositionAdjustment = badgePositionAdjustment
+      }
       tabBar.standardAppearance = appearance
       if #available(iOS 15.0, *) {
         tabBar.scrollEdgeAppearance = appearance
@@ -434,7 +461,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private func cycleThroughAllItemsThenReveal(selectedIndex: Int) {
     guard let bar = tabBar, let items = bar.items, !items.isEmpty,
           selectedIndex >= 0, selectedIndex < items.count else {
-      container.isHidden = false
+      initialRevealPending = false
+      container.isHidden = !pendingExternalVisible
       return
     }
     // UIKit auto-selects item 0 as soon as `.items` is assigned, so visiting index 0 first would
@@ -451,7 +479,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private func step(bar: UITabBar, items: [UITabBarItem], order: [Int], position: Int) {
     guard position < order.count else {
       forceLayoutPass()
-      container.isHidden = false
+      initialRevealPending = false
+      container.isHidden = !pendingExternalVisible
       return
     }
     bar.selectedItem = items[order[position]]
