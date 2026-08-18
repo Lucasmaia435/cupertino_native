@@ -100,9 +100,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     // label truncated. Cycle through every item once to give each of them that transition, with
     // `container` hidden throughout so none of it is visible, landing on the real selection.
     container.isHidden = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-      self?.cycleThroughAllItemsThenReveal(selectedIndex: selectedIndex)
-    }
+    waitUntilWindowedThenCycle(selectedIndex: selectedIndex, attempt: 0)
 
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else {
@@ -452,12 +450,27 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     )
   }
 
+  /// Polls until `container` is actually attached to a window before starting the cycle below —
+  /// before that point there's no display link driving real commits, so cycling any earlier
+  /// wouldn't yield genuine transitions anyway. Runs at a short, fixed interval (rather than
+  /// racing ahead with bare `async` re-enqueues) so it reliably catches the attach as soon as it
+  /// happens instead of exhausting its attempt budget first; capped so a container that never
+  /// gets attached (e.g. torn down mid-flight) can't poll forever.
+  private func waitUntilWindowedThenCycle(selectedIndex: Int, attempt: Int) {
+    guard container.window == nil, attempt < 100 else {
+      cycleThroughAllItemsThenReveal(selectedIndex: selectedIndex)
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.005) { [weak self] in
+      self?.waitUntilWindowedThenCycle(selectedIndex: selectedIndex, attempt: attempt + 1)
+    }
+  }
+
   /// Selects each item in turn (each with a real display commit before moving to the next, since
   /// two `selectedItem` assignments with no display in between render identically to never
   /// having changed it at all), landing on `selectedIndex` last, then reveals `container`.
   /// `container` must already be hidden by the caller so this cycle is never visible — the reveal
-  /// itself is deferred by one more step interval so the final selection's own slide animation
-  /// has time to settle before anything becomes visible.
+  /// itself only happens once the final selection's own transition has actually committed.
   private func cycleThroughAllItemsThenReveal(selectedIndex: Int) {
     guard let bar = tabBar, let items = bar.items, !items.isEmpty,
           selectedIndex >= 0, selectedIndex < items.count else {
