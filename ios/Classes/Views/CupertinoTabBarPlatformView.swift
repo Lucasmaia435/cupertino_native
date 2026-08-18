@@ -44,6 +44,16 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var initialRevealPending: Bool = true
   private var pendingExternalVisible: Bool = true
 
+  // Drives the item-cycling workaround one real screen refresh at a time instead of a fixed
+  // delay, so each step still lands on its own genuinely presented frame (required for the
+  // iOS 26 label-layout fix below) while taking as little wall-clock time as the display allows.
+  private var cycleDisplayLink: CADisplayLink?
+  private var cycleAdvance: (() -> Void)?
+
+  deinit {
+    cycleDisplayLink?.invalidate()
+  }
+
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(
       name: "CupertinoNativeTabBar_\(viewId)",
@@ -491,6 +501,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
 
   private func step(bar: UITabBar, items: [UITabBarItem], order: [Int], position: Int) {
     guard position < order.count else {
+      cycleDisplayLink?.invalidate()
+      cycleDisplayLink = nil
+      cycleAdvance = nil
       forceLayoutPass()
       initialRevealPending = false
       container.isHidden = !pendingExternalVisible
@@ -499,9 +512,20 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     bar.selectedItem = items[order[position]]
     bar.setNeedsLayout()
     bar.layoutIfNeeded()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+    cycleAdvance = { [weak self] in
       self?.step(bar: bar, items: items, order: order, position: position + 1)
     }
+    if cycleDisplayLink == nil {
+      let link = CADisplayLink(target: self, selector: #selector(handleCycleDisplayLinkTick))
+      link.add(to: .main, forMode: .common)
+      cycleDisplayLink = link
+    }
+  }
+
+  @objc private func handleCycleDisplayLinkTick() {
+    let advance = cycleAdvance
+    cycleAdvance = nil
+    advance?()
   }
 
   private func applySelection(selectedIndex: Int) {
