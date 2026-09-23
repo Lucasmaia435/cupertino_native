@@ -25,10 +25,12 @@ class CNGlassCapsuleMenuEntry {
 
 /// One control inside a [CNGlassCapsule].
 class CNGlassCapsuleItem {
-  /// Creates a glass capsule item. Provide one of [icon], [image] or [title].
+  /// Creates a glass capsule item. Provide one of [icon], [flutterIcon],
+  /// [image] or [title].
   const CNGlassCapsuleItem({
     this.icon,
     this.selectedIcon,
+    this.flutterIcon,
     this.image,
     this.title,
     this.label,
@@ -36,8 +38,8 @@ class CNGlassCapsuleItem {
     this.badgeCount,
     this.menu,
   }) : assert(
-         icon == null || image == null,
-         'Use either icon (CNSymbol) or image (ImageProvider), not both.',
+         (icon == null ? 0 : 1) + (flutterIcon == null ? 0 : 1) + (image == null ? 0 : 1) <= 1,
+         'Use one of icon (CNSymbol), flutterIcon (Icon) or image (ImageProvider).',
        );
 
   /// SF Symbol shown as this item's glyph.
@@ -46,6 +48,13 @@ class CNGlassCapsuleItem {
   /// SF Symbol shown instead of [icon] while this item is selected. Falls
   /// back to [icon] when null.
   final CNSymbol? selectedIcon;
+
+  /// A Flutter [Icon] shown as this item's glyph instead of an SF Symbol —
+  /// for a Material icon, or a custom icon font, that has no SF Symbol
+  /// equivalent. Rendered natively from the icon's codepoint and font, the
+  /// same way [flutterIcon] works on `CNTabBarItem`, so it inherits the
+  /// capsule's selection tint like an SF Symbol would.
+  final Icon? flutterIcon;
 
   /// A picture (asset, file, or network image) shown as a round avatar
   /// instead of an SF Symbol.
@@ -93,6 +102,16 @@ class CNGlassCapsuleItem {
   Map<String, dynamic> _toNativeMap(BuildContext context) => <String, dynamic>{
     if (icon != null) 'symbol': icon!.name,
     if (selectedIcon != null) 'selectedSymbol': selectedIcon!.name,
+    if (flutterIcon?.icon case final iconData?) ...{
+      'iconCodePoint': iconData.codePoint,
+      if (iconData.fontFamily != null) 'iconFontFamily': iconData.fontFamily,
+      if (iconData.fontPackage != null) 'iconFontPackage': iconData.fontPackage,
+      if (flutterIcon!.size != null) 'iconSize': flutterIcon!.size,
+      if (flutterIcon!.fill != null) 'iconFill': flutterIcon!.fill,
+      if (flutterIcon!.weight != null) 'iconWeight': flutterIcon!.weight,
+      if (flutterIcon!.grade != null) 'iconGrade': flutterIcon!.grade,
+      if (flutterIcon!.opticalSize != null) 'iconOpticalSize': flutterIcon!.opticalSize,
+    },
     if (_extractAsset() case final asset?) 'asset': asset,
     if (_extractFile() case final file?) 'file': file,
     if (_extractNetwork() case final network?) 'network': network,
@@ -117,6 +136,11 @@ class CNGlassCapsuleItem {
     return other is CNGlassCapsuleItem &&
         other.icon?.name == icon?.name &&
         other.selectedIcon?.name == selectedIcon?.name &&
+        other.flutterIcon?.icon == flutterIcon?.icon &&
+        other.flutterIcon?.fill == flutterIcon?.fill &&
+        other.flutterIcon?.weight == flutterIcon?.weight &&
+        other.flutterIcon?.grade == flutterIcon?.grade &&
+        other.flutterIcon?.opticalSize == flutterIcon?.opticalSize &&
         other.image == image &&
         other.title == title &&
         other.label == label &&
@@ -132,6 +156,7 @@ class CNGlassCapsuleItem {
   int get hashCode => Object.hash(
     icon?.name,
     selectedIcon?.name,
+    flutterIcon?.icon,
     image,
     title,
     label,

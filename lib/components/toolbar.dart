@@ -21,21 +21,35 @@ enum CNToolbarActionSpacer {
 
 /// Describes a single action button shown in a [CNToolbar].
 class CNToolbarAction {
-  /// Creates a toolbar action. Provide either [icon] or [text].
+  /// Creates a toolbar action. Provide [icon], [flutterIcon] or [text].
   const CNToolbarAction({
     this.icon,
+    this.flutterIcon,
     this.text,
     this.label,
     required this.onPressed,
     this.tint,
     this.prominent = false,
     this.spacerAfter = CNToolbarActionSpacer.none,
-  }) : assert(icon != null || text != null, 'Provide icon or text.');
+  }) : assert(
+         icon != null || flutterIcon != null || text != null,
+         'Provide icon, flutterIcon or text.',
+       ),
+       assert(
+         icon == null || flutterIcon == null,
+         'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
+       );
 
   /// SF Symbol shown as the action's glyph.
   final CNSymbol? icon;
 
-  /// Text shown when [icon] is null.
+  /// A Flutter [Icon] shown as the action's glyph instead of an SF Symbol —
+  /// for a Material icon, or a custom icon font, that has no SF Symbol
+  /// equivalent. Rendered natively from the icon's codepoint and font, the
+  /// same way [flutterIcon] works on `CNTabBarItem`.
+  final Icon? flutterIcon;
+
+  /// Text shown when neither [icon] nor [flutterIcon] is set.
   final String? text;
 
   /// Accessibility label and the name shown if this action overflows into a
@@ -59,6 +73,16 @@ class CNToolbarAction {
 
   Map<String, dynamic> _toNativeMap(BuildContext context) => {
     if (icon != null) 'icon': icon!.name,
+    if (flutterIcon?.icon case final iconData?) ...{
+      'iconCodePoint': iconData.codePoint,
+      if (iconData.fontFamily != null) 'iconFontFamily': iconData.fontFamily,
+      if (iconData.fontPackage != null) 'iconFontPackage': iconData.fontPackage,
+      if (flutterIcon!.size != null) 'iconSize': flutterIcon!.size,
+      if (flutterIcon!.fill != null) 'iconFill': flutterIcon!.fill,
+      if (flutterIcon!.weight != null) 'iconWeight': flutterIcon!.weight,
+      if (flutterIcon!.grade != null) 'iconGrade': flutterIcon!.grade,
+      if (flutterIcon!.opticalSize != null) 'iconOpticalSize': flutterIcon!.opticalSize,
+    },
     if (text != null) 'title': text,
     if (effectiveLabel != null) 'label': effectiveLabel,
     'spacerAfter': spacerAfter.index,
@@ -71,6 +95,11 @@ class CNToolbarAction {
     if (identical(this, other)) return true;
     return other is CNToolbarAction &&
         other.icon?.name == icon?.name &&
+        other.flutterIcon?.icon == flutterIcon?.icon &&
+        other.flutterIcon?.fill == flutterIcon?.fill &&
+        other.flutterIcon?.weight == flutterIcon?.weight &&
+        other.flutterIcon?.grade == flutterIcon?.grade &&
+        other.flutterIcon?.opticalSize == flutterIcon?.opticalSize &&
         other.text == text &&
         other.label == label &&
         other.tint == tint &&
@@ -80,7 +109,7 @@ class CNToolbarAction {
 
   @override
   int get hashCode =>
-      Object.hash(icon?.name, text, label, tint, prominent, spacerAfter);
+      Object.hash(icon?.name, flutterIcon?.icon, text, label, tint, prominent, spacerAfter);
 }
 
 /// A Cupertino-native top toolbar. Uses a native UINavigationBar (iOS) or a

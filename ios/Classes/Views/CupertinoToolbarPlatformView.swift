@@ -133,6 +133,18 @@ class CupertinoToolbarPlatformView: NSObject, FlutterPlatformView {
 
         if let icon = action["icon"] as? String {
           button = UIBarButtonItem(image: UIImage(systemName: icon), style: .plain, target: self, action: #selector(actionTapped(_:)))
+        } else if let codePoint = (action["iconCodePoint"] as? NSNumber)?.intValue {
+          let image = CNFlutterIconImageRenderer.image(
+            codePoint: codePoint,
+            fontFamily: action["iconFontFamily"] as? String,
+            fontPackage: action["iconFontPackage"] as? String,
+            pointSize: Self.cgFloat(action["iconSize"]) ?? 20,
+            fill: Self.cgFloat(action["iconFill"]),
+            weight: Self.cgFloat(action["iconWeight"]),
+            grade: Self.cgFloat(action["iconGrade"]),
+            opticalSize: Self.cgFloat(action["iconOpticalSize"])
+          )
+          button = UIBarButtonItem(image: image, style: .plain, target: self, action: #selector(actionTapped(_:)))
         } else if let title = action["title"] as? String {
           button = UIBarButtonItem(title: title, style: .plain, target: self, action: #selector(actionTapped(_:)))
         }
@@ -232,6 +244,10 @@ class CupertinoToolbarPlatformView: NSObject, FlutterPlatformView {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private static func cgFloat(_ value: Any?) -> CGFloat? {
+    (value as? NSNumber).map { CGFloat(truncating: $0) }
   }
 
   private static func colorFromARGB(_ argb: Int) -> UIColor {

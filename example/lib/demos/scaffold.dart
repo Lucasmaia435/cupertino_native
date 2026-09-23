@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:cupertino_native/cupertino_native.dart';
 
 class ScaffoldDemoPage extends StatefulWidget {
@@ -19,6 +20,13 @@ class _ScaffoldDemoPageState extends State<ScaffoldDemoPage> {
       title: _titles[_index],
       actions: [
         CNToolbarAction(icon: const CNSymbol('magnifyingglass', size: 18), onPressed: () {}),
+        // A Material icon with no SF Symbol equivalent, rendered natively
+        // via flutterIcon rather than falling back to text.
+        CNToolbarAction(
+          flutterIcon: const Icon(Icons.local_pizza),
+          label: 'Pizza',
+          onPressed: () {},
+        ),
         CNToolbarAction(
           icon: const CNSymbol('plus', size: 18),
           label: 'Add',

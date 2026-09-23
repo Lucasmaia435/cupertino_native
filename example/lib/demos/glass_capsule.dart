@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:cupertino_native/cupertino_native.dart';
 
 class GlassCapsuleDemoPage extends StatefulWidget {
@@ -55,6 +56,19 @@ class _GlassCapsuleDemoPageState extends State<GlassCapsuleDemoPage> {
                   selectedIndex: _tabIndex,
                   inset: CNGlassCapsule.tabsInset,
                   onTap: (i) => setState(() => _tabIndex = i),
+                ),
+              ),
+              // A capsule using flutterIcon: Material icons rendered natively,
+              // for glyphs that have no SF Symbol equivalent.
+              SizedBox(
+                width: CNGlassCapsule.width,
+                height: CNGlassCapsule.actionsHeight(2),
+                child: CNGlassCapsule(
+                  items: const [
+                    CNGlassCapsuleItem(flutterIcon: Icon(Icons.emoji_food_beverage), label: 'Beverage'),
+                    CNGlassCapsuleItem(flutterIcon: Icon(Icons.local_pizza), label: 'Pizza'),
+                  ],
+                  onTap: (i) => debugPrint('tapped flutterIcon action $i'),
                 ),
               ),
             ],

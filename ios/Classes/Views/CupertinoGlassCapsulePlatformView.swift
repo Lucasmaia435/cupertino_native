@@ -231,6 +231,18 @@ class CupertinoGlassCapsulePlatformView: NSObject, FlutterPlatformView {
     if let symbol = symbol, !symbol.isEmpty {
       return UIImage(systemName: symbol) ?? UIImage(named: symbol)
     }
+    if let codePoint = (item["iconCodePoint"] as? NSNumber)?.intValue {
+      return CNFlutterIconImageRenderer.image(
+        codePoint: codePoint,
+        fontFamily: item["iconFontFamily"] as? String,
+        fontPackage: item["iconFontPackage"] as? String,
+        pointSize: Self.cgFloat(item["iconSize"]) ?? 20,
+        fill: Self.cgFloat(item["iconFill"]),
+        weight: Self.cgFloat(item["iconWeight"]),
+        grade: Self.cgFloat(item["iconGrade"]),
+        opticalSize: Self.cgFloat(item["iconOpticalSize"])
+      )
+    }
     if let asset = item["asset"] as? String, !asset.isEmpty {
       let key = FlutterDartProject.lookupKey(forAsset: asset)
       if let path = Bundle.main.path(forResource: key, ofType: nil),
@@ -321,6 +333,10 @@ class CupertinoGlassCapsulePlatformView: NSObject, FlutterPlatformView {
 
   @objc private func tapped(_ sender: UIButton) {
     channel.invokeMethod("onItemTapped", arguments: ["index": sender.tag])
+  }
+
+  private static func cgFloat(_ value: Any?) -> CGFloat? {
+    (value as? NSNumber).map { CGFloat(truncating: $0) }
   }
 
   private static func colorFromARGB(_ argb: Int) -> UIColor {
