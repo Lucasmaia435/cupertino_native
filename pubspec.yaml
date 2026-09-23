@@ -14,6 +14,11 @@ dependencies:
 
   plugin_platform_interface: ^2.0.2
 
+  # iPhone Duo (foldable) support: hinge/fold posture and reserved regions,
+  # used by CupertinoNativeScaffold to move the toolbar and tab bar into a
+  # vertical side strip. Safe no-op on every non-foldable device/platform.
+  foldable: ^1.0.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

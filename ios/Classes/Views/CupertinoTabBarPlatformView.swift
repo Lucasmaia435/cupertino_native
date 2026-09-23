@@ -403,7 +403,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       // even for the empty string used to render a plain dot), and pulling it further left/down
       // from its default position tucks it over the icon's corner instead of floating beside it.
       let badgeTextAttributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 4)]
-      let badgePositionAdjustment = UIOffset(horizontal: 12, vertical: 4)
+      let badgePositionAdjustment = UIOffset(horizontal: 3, vertical: 4)
       for itemAppearance in [
         appearance.stackedLayoutAppearance,
         appearance.inlineLayoutAppearance,

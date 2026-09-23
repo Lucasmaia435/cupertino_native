@@ -8,6 +8,8 @@ import 'demos/icon.dart';
 import 'demos/popup_menu_button.dart';
 import 'demos/button.dart';
 import 'demos/search_bar.dart';
+import 'demos/scaffold.dart';
+import 'demos/glass_capsule.dart';
 
 void main() {
   runApp(const MyApp());
@@ -226,6 +228,30 @@ class HomePage extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     CupertinoPageRoute(builder: (_) => const TabBarDemoPage()),
+                  );
+                },
+              ),
+              CupertinoListTile(
+                title: Text('Scaffold'),
+                leading: CNIcon(
+                  symbol: CNSymbol('rectangle.stack', color: accentColor),
+                ),
+                trailing: CupertinoListTileChevron(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    CupertinoPageRoute(builder: (_) => const ScaffoldDemoPage()),
+                  );
+                },
+              ),
+              CupertinoListTile(
+                title: Text('Glass Capsule'),
+                leading: CNIcon(
+                  symbol: CNSymbol('capsule', color: accentColor),
+                ),
+                trailing: CupertinoListTileChevron(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    CupertinoPageRoute(builder: (_) => const GlassCapsuleDemoPage()),
                   );
                 },
               ),

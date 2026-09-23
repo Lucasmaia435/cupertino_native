@@ -13,6 +13,9 @@ export 'style/button_style.dart';
 export 'style/mesh_gradient.dart';
 export 'components/button.dart';
 export 'components/search_bar.dart';
+export 'components/toolbar.dart';
+export 'components/glass_capsule.dart';
+export 'components/scaffold.dart';
 
 import 'cupertino_native_platform_interface.dart';
 

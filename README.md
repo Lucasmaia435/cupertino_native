@@ -153,6 +153,49 @@ CNTabBar(
 )
 ```
 
+### Scaffold
+
+A native iOS 26 Liquid Glass toolbar and `UITabBar`, composed the way `CupertinoPageScaffold` composes `CupertinoNavigationBar`. On a folding iPhone, the toolbar and tab bar automatically move into a vertical strip on the edge the system reserves.
+
+```dart
+int _tabIndex = 0;
+
+CupertinoNativeScaffold(
+  title: 'Home',
+  actions: [
+    CNToolbarAction(
+      icon: const CNSymbol('magnifyingglass', size: 18),
+      onPressed: () {},
+    ),
+  ],
+  tabs: const [
+    CNTabBarItem(label: 'Home', icon: CNSymbol('house.fill')),
+    CNTabBarItem(label: 'Profile', icon: CNSymbol('person.crop.circle')),
+    CNTabBarItem(label: 'Settings', icon: CNSymbol('gearshape.fill')),
+  ],
+  currentTabIndex: _tabIndex,
+  onTabChange: (i) => setState(() => _tabIndex = i),
+  children: [HomePage(), ProfilePage(), SettingsPage()],
+)
+```
+
+### Glass Capsule
+
+The native Liquid Glass control iOS 26 uses for a folding iPhone's trailing bar: a vertical column of icon buttons in one capsule. `CupertinoNativeScaffold` uses it internally for the folding-iPhone layout above, but it's also available standalone — with a `selectedIndex` it behaves as a vertical tab bar with a sliding selection highlight; without one, it's a plain group of glass buttons.
+
+```dart
+CNGlassCapsule(
+  items: const [
+    CNGlassCapsuleItem(icon: CNSymbol('house'), label: 'Home'),
+    CNGlassCapsuleItem(icon: CNSymbol('heart'), label: 'Favorites', badgeCount: 3),
+    CNGlassCapsuleItem(icon: CNSymbol('gearshape'), label: 'Settings'),
+  ],
+  selectedIndex: _tabIndex,
+  inset: CNGlassCapsule.tabsInset,
+  onTap: (i) => setState(() => _tabIndex = i),
+)
+```
+
 ## What's left to do?
 So far, this is more of a proof of concept than a full package (although the included components do work). Future improvements include:
 
