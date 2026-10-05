@@ -241,10 +241,10 @@ class _SearchBarDemoPageState extends State<SearchBarDemoPage> {
                   controller: _coloredController,
                   placeholder: 'Search components',
                   style: const CNTextFieldStyle(tint: CupertinoColors.systemBlue),
-                  leading: const Icon(CupertinoIcons.search, color: CupertinoColors.systemGrey, size: 20),
-                  trailing: [
-                    _iconAction(
-                      icon: CupertinoIcons.clear_circled_solid,
+                  leadingFlutterIcon: const Icon(CupertinoIcons.search, color: CupertinoColors.systemGrey, size: 20),
+                  trailingActions: [
+                    CNTextFieldAction(
+                      flutterIcon: const Icon(CupertinoIcons.clear_circled_solid),
                       color: CupertinoColors.systemGrey,
                       onPressed: () {
                         setState(() {

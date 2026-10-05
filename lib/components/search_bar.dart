@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
 import '../channel/platform_view_modal_visibility.dart';
+import '../style/sf_symbol.dart';
 
 /// Layout configuration for [CNTextField].
 class CNTextFieldLayout {
@@ -91,11 +92,53 @@ class CNTextFieldStyle {
   final double disabledOpacity;
 }
 
+/// A single native trailing accessory button for [CNTextField.trailingActions].
+///
+/// Rendered entirely on the native side (inside the glass chrome), unlike
+/// [CNTextField.trailing] which draws Flutter widgets in an overlay above the
+/// native view. At most 2 actions are shown at once.
+class CNTextFieldAction {
+  /// Creates a native trailing action.
+  const CNTextFieldAction({
+    this.icon,
+    this.flutterIcon,
+    this.color,
+    this.onPressed,
+    this.enabled = true,
+  }) : assert(
+         icon == null || flutterIcon == null,
+         'Use either icon (CNSymbol) or flutterIcon (Icon), not both.',
+       ),
+       assert(
+         icon != null || flutterIcon != null,
+         'Provide icon (CNSymbol) or flutterIcon (Icon).',
+       );
+
+  /// SF Symbol rendered natively.
+  final CNSymbol? icon;
+
+  /// Flutter/Material icon rendered natively from its glyph data.
+  final Icon? flutterIcon;
+
+  /// Tint color for the action's icon.
+  final Color? color;
+
+  /// Called when the action is tapped.
+  final VoidCallback? onPressed;
+
+  /// Whether the action responds to taps.
+  final bool enabled;
+}
+
 /// A Cupertino-native text field rendered by the host platform.
 ///
-/// Accessories are provided as regular Flutter widgets via [leading] and
-/// [trailing]. Visibility and behavior are intentionally controlled by the
-/// client widget tree, not by the component itself.
+/// Simple leading/trailing icons can be rendered entirely natively via
+/// [leadingIcon]/[leadingFlutterIcon] and [trailingActions], which live
+/// inside the native glass chrome. For fully custom content, [leading] and
+/// [trailing] remain available as regular Flutter widgets drawn in an
+/// overlay above the native view; visibility and behavior for those are
+/// intentionally controlled by the client widget tree, not by the component
+/// itself.
 class CNTextField extends StatefulWidget {
   /// Creates a native text field with Flutter-driven accessories.
   const CNTextField({
@@ -111,6 +154,9 @@ class CNTextField extends StatefulWidget {
     this.autofocus = false,
     this.leading,
     this.trailing = const [],
+    this.leadingIcon,
+    this.leadingFlutterIcon,
+    this.trailingActions,
     this.layout = const CNTextFieldLayout(),
     this.style = const CNTextFieldStyle(),
     TextInputAction? textInputAction,
@@ -118,7 +164,15 @@ class CNTextField extends StatefulWidget {
     this.padding = EdgeInsets.zero,
     this.shrinkWrap = false,
     this.autocorrect = true,
-  }) : _textInputAction = textInputAction;
+  }) : _textInputAction = textInputAction,
+       assert(
+         leadingIcon == null || leadingFlutterIcon == null,
+         'Use either leadingIcon (CNSymbol) or leadingFlutterIcon (Icon), not both.',
+       ),
+       assert(
+         leading == null || (leadingIcon == null && leadingFlutterIcon == null),
+         'Provide leading OR leadingIcon/leadingFlutterIcon, not both.',
+       );
 
   /// Current text displayed by the field.
   final String text;
@@ -152,6 +206,19 @@ class CNTextField extends StatefulWidget {
 
   /// Optional trailing accessories rendered inside the field chrome.
   final List<Widget> trailing;
+
+  /// SF Symbol rendered natively as the leading accessory, instead of
+  /// [leading]. Mutually exclusive with [leading] and [leadingFlutterIcon].
+  final CNSymbol? leadingIcon;
+
+  /// Flutter/Material icon rendered natively as the leading accessory,
+  /// instead of [leading]. Mutually exclusive with [leading] and
+  /// [leadingIcon].
+  final Icon? leadingFlutterIcon;
+
+  /// Native trailing accessory buttons, instead of [trailing]. At most 2 are
+  /// shown at once. Mutually exclusive with [trailing].
+  final List<CNTextFieldAction>? trailingActions;
 
   /// Layout configuration for the field.
   final CNTextFieldLayout layout;
@@ -215,6 +282,8 @@ class _CNTextFieldState extends State<CNTextField>
   String? _lastBehaviorSignature;
   String? _lastLayoutSignature;
   String? _lastStyleSignature;
+  String? _lastIconsSignature;
+  String? _lastTrailingActionsSignature;
 
   TextEditingController get _textController =>
       widget.controller ?? _fallbackController;
@@ -262,6 +331,14 @@ class _CNTextFieldState extends State<CNTextField>
   bool get _hasLeadingAccessory => widget.leading != null;
 
   bool get _hasTrailingAccessories => widget.trailing.isNotEmpty;
+
+  bool get _hasNativeLeadingIcon =>
+      widget.leadingIcon != null || widget.leadingFlutterIcon != null;
+
+  List<CNTextFieldAction> get _nativeTrailingActions =>
+      widget.trailingActions ?? const <CNTextFieldAction>[];
+
+  bool get _hasNativeTrailingActions => _nativeTrailingActions.isNotEmpty;
 
   double get _leadingReservedWidth =>
       _hasLeadingAccessory ? _leadingWidth + _layout.accessoryGap : 0.0;
@@ -652,7 +729,7 @@ class _CNTextFieldState extends State<CNTextField>
     await channel.invokeMethod('focus');
   }
 
-  String _jsonSignature(Map<String, dynamic> value) => jsonEncode(value);
+  String _jsonSignature(Object? value) => jsonEncode(value);
 
   Color? _resolveDynamicColor(Color? color) {
     if (color == null) return null;
@@ -703,17 +780,74 @@ class _CNTextFieldState extends State<CNTextField>
 
   Map<String, dynamic> _encodeBehavior() {
     return <String, dynamic>{
-      'showsLeadingAccessory': false,
+      'showsLeadingAccessory': _hasNativeLeadingIcon,
       'leadingAccessoryTriggersSubmit': false,
       'showsCancelButton': false,
       'clearButtonVisibility': 'never',
       'sendButtonVisibility': 'never',
-      'trailingActionsVisibility': 'never',
-      'trailingAccessoryOrder': const <String>[],
+      'trailingActionsVisibility': _hasNativeTrailingActions ? 'always' : 'never',
+      'trailingAccessoryOrder': _hasNativeTrailingActions
+          ? const <String>['actions']
+          : const <String>[],
       'maxVisibleLines': _effectiveMaxVisibleLines,
       'textInputAction': _encodeTextInputAction(),
       'autocorrect': widget.autocorrect,
     };
+  }
+
+  Map<String, dynamic>? _encodeNativeIconData({CNSymbol? symbol, Icon? flutterIcon}) {
+    if (symbol != null) {
+      final paletteColors = symbol.paletteColors;
+      return <String, dynamic>{
+        'iconDataName': symbol.name,
+        'iconDataSize': symbol.size,
+        'iconDataColor': resolveColorToArgb(symbol.color, context),
+        if (symbol.mode != null) 'iconRenderingMode': symbol.mode!.name,
+        if (paletteColors != null)
+          'iconPaletteColors': paletteColors
+              .map((c) => resolveColorToArgb(c, context))
+              .toList(),
+      };
+    }
+    final data = flutterIcon?.icon;
+    if (data == null) return null;
+    return <String, dynamic>{
+      'iconDataCodePoint': data.codePoint,
+      'iconDataFontFamily': data.fontFamily,
+      'iconDataFontPackage': data.fontPackage,
+      'iconDataMatchTextDirection': data.matchTextDirection,
+      'iconDataColor': resolveColorToArgb(flutterIcon!.color, context),
+      'iconDataSize': flutterIcon.size ?? 18.0,
+      if (flutterIcon.fill != null) 'iconDataFill': flutterIcon.fill,
+      if (flutterIcon.weight != null) 'iconDataWeight': flutterIcon.weight,
+      if (flutterIcon.grade != null) 'iconDataGrade': flutterIcon.grade,
+      if (flutterIcon.opticalSize != null)
+        'iconDataOpticalSize': flutterIcon.opticalSize,
+    };
+  }
+
+  Map<String, dynamic> _encodeIcons() {
+    return <String, dynamic>{
+      'leading': _encodeNativeIconData(
+        symbol: widget.leadingIcon,
+        flutterIcon: widget.leadingFlutterIcon,
+      ),
+    };
+  }
+
+  List<Map<String, dynamic>?> _encodeTrailingActionsPayload() {
+    return _nativeTrailingActions.map((action) {
+      final data = _encodeNativeIconData(
+        symbol: action.icon,
+        flutterIcon: action.flutterIcon,
+      );
+      if (data == null) return null;
+      final color = resolveColorToArgb(action.color, context);
+      if (color != null) {
+        data['iconDataColor'] = color;
+      }
+      return data;
+    }).toList();
   }
 
   Map<String, dynamic> _encodeLayout() {
@@ -759,6 +893,10 @@ class _CNTextFieldState extends State<CNTextField>
     _lastBehaviorSignature = _jsonSignature(_encodeBehavior());
     _lastLayoutSignature = _jsonSignature(_encodeLayout());
     _lastStyleSignature = _jsonSignature(_encodeStyle());
+    _lastIconsSignature = _jsonSignature(_encodeIcons());
+    _lastTrailingActionsSignature = _jsonSignature(
+      _encodeTrailingActionsPayload(),
+    );
   }
 
   Future<void> _syncPropsToNativeIfNeeded() async {
@@ -771,6 +909,10 @@ class _CNTextFieldState extends State<CNTextField>
     final behaviorSignature = _jsonSignature(_encodeBehavior());
     final layoutSignature = _jsonSignature(_encodeLayout());
     final styleSignature = _jsonSignature(_encodeStyle());
+    final iconsSignature = _jsonSignature(_encodeIcons());
+    final trailingActionsSignature = _jsonSignature(
+      _encodeTrailingActionsPayload(),
+    );
 
     await _syncEditingStateToNativeIfNeeded(channel);
 
@@ -808,6 +950,18 @@ class _CNTextFieldState extends State<CNTextField>
       _lastStyleSignature = styleSignature;
     }
 
+    if (_lastIconsSignature != iconsSignature) {
+      await channel.invokeMethod('setIcons', {'icons': _encodeIcons()});
+      _lastIconsSignature = iconsSignature;
+    }
+
+    if (_lastTrailingActionsSignature != trailingActionsSignature) {
+      await channel.invokeMethod('setTrailingActions', {
+        'traillingActions': _encodeTrailingActionsPayload(),
+      });
+      _lastTrailingActionsSignature = trailingActionsSignature;
+    }
+
     if (_lastFocusEnabled != focusEnabled) {
       await channel.invokeMethod('setFocusEnabled', {
         'focusEnabled': focusEnabled,
@@ -840,6 +994,8 @@ class _CNTextFieldState extends State<CNTextField>
     _lastBehaviorSignature = null;
     _lastLayoutSignature = null;
     _lastStyleSignature = null;
+    _lastIconsSignature = null;
+    _lastTrailingActionsSignature = null;
     _syncBrightnessIfNeeded();
     _syncPropsToNativeIfNeeded();
     if (_focusNode.hasFocus && _canInteractWithTextInput) {
@@ -883,6 +1039,16 @@ class _CNTextFieldState extends State<CNTextField>
       case 'focusChanged':
         final focused = args?['focused'] == true;
         _applyNativeFocus(focused);
+        break;
+      case 'trailingActionPressed':
+        final index = (args?['index'] as num?)?.toInt();
+        final actions = _nativeTrailingActions;
+        if (index != null && index >= 0 && index < actions.length) {
+          final action = actions[index];
+          if (action.enabled) {
+            action.onPressed?.call();
+          }
+        }
         break;
     }
     return null;
@@ -928,6 +1094,14 @@ class _CNTextFieldState extends State<CNTextField>
 
   @override
   Widget build(BuildContext context) {
+    assert(
+      widget.trailing.isEmpty || widget.trailingActions == null,
+      'Provide trailing OR trailingActions, not both.',
+    );
+    assert(
+      widget.trailingActions == null || widget.trailingActions!.length <= 2,
+      'trailingActions supports at most 2 items (native accessory slot limit).',
+    );
     if (!_isNativePlatform) {
       final fallbackField = _buildFallback(context);
       return Padding(
@@ -1002,12 +1176,16 @@ class _CNTextFieldState extends State<CNTextField>
     final showFlutterOverlay = isPlatformViewVisible;
     final leadingInset = math.max(0.0, _layout.fieldHorizontalPadding - 4);
     final trailingInset = math.max(0.0, _layout.fieldHorizontalPadding - 2);
+    final fieldHeight = _effectiveNativeHeight;
+    // Mirrors the native side's clamp (resolvedFieldCornerRadius), so the
+    // Flutter-drawn overlay's corner curve lines up with the glass pill's
+    // actual rendered corner instead of a larger, unclamped radius.
+    final resolvedBorderRadius = math.min(_layout.borderRadius, fieldHeight / 2.0);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(_layout.borderRadius),
+    return ClipRSuperellipse(
+      borderRadius: BorderRadius.circular(resolvedBorderRadius),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final fieldHeight = _effectiveNativeHeight;
           final leadingTop = _leadingTextTop(context);
           final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
@@ -1128,6 +1306,14 @@ class _CNTextFieldState extends State<CNTextField>
         )
         .toDouble();
 
+    final fallbackFieldHeight = (_reportedFallbackFieldHeight ?? minFieldHeight)
+        .clamp(minFieldHeight, maxFieldHeight)
+        .toDouble();
+    final resolvedFallbackBorderRadius = math.min(
+      _layout.borderRadius,
+      fallbackFieldHeight / 2.0,
+    );
+
     Widget content = AnimatedSize(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
@@ -1137,14 +1323,11 @@ class _CNTextFieldState extends State<CNTextField>
           minHeight: minFieldHeight,
           maxHeight: maxFieldHeight,
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(_layout.borderRadius),
+        child: ClipRSuperellipse(
+          borderRadius: BorderRadius.circular(resolvedFallbackBorderRadius),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final fieldHeight =
-                  (_reportedFallbackFieldHeight ?? minFieldHeight)
-                      .clamp(minFieldHeight, maxFieldHeight)
-                      .toDouble();
+              final fieldHeight = fallbackFieldHeight;
               final leadingTop = _leadingTextTop(context);
               final trailingTop = _trailingLastLineTop(context, fieldHeight);
 
@@ -1157,7 +1340,7 @@ class _CNTextFieldState extends State<CNTextField>
                       decoration: BoxDecoration(
                         color: resolvedFieldBackground,
                         borderRadius: BorderRadius.circular(
-                          _layout.borderRadius,
+                          resolvedFallbackBorderRadius,
                         ),
                         border: resolvedFieldBorderColor == null
                             ? null
@@ -1170,7 +1353,7 @@ class _CNTextFieldState extends State<CNTextField>
                           decoration: BoxDecoration(
                             color: resolvedFieldOverlayColor,
                             borderRadius: BorderRadius.circular(
-                              _layout.borderRadius,
+                              resolvedFallbackBorderRadius,
                             ),
                           ),
                         ),

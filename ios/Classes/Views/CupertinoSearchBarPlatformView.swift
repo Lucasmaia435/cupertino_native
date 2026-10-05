@@ -18,7 +18,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   }
 
   private struct TrailingAction {
-    let iconDataCodePoint: Int
+    let iconDataName: String?
+    let iconRenderingMode: String?
+    let iconPaletteColors: [UIColor]?
+    let iconDataCodePoint: Int?
     let iconDataFontFamily: String?
     let iconDataFontPackage: String?
     let iconDataMatchTextDirection: Bool
@@ -137,14 +140,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   private func updateFieldShape(for height: CGFloat? = nil) {
     let resolvedCornerRadius = resolvedFieldCornerRadius(for: height)
-    fieldClipView.layer.cornerRadius = resolvedCornerRadius
-    fieldClipView.layer.cornerCurve = .continuous
     fieldSolidBackgroundView.layer.cornerRadius = resolvedCornerRadius
     fieldSolidBackgroundView.layer.cornerCurve = .continuous
     fieldBackgroundView.layer.cornerRadius = resolvedCornerRadius
     fieldBackgroundView.layer.cornerCurve = .continuous
-    fieldTintOverlayView.layer.cornerRadius = resolvedCornerRadius
-    fieldTintOverlayView.layer.cornerCurve = .continuous
     fieldContentView.layer.cornerRadius = resolvedCornerRadius
     fieldContentView.layer.cornerCurve = .continuous
   }
@@ -387,8 +386,6 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
     fieldClipView.translatesAutoresizingMaskIntoConstraints = false
     fieldClipView.backgroundColor = .clear
-    fieldClipView.clipsToBounds = true
-    fieldClipView.layer.masksToBounds = true
 
     fieldSolidBackgroundView.translatesAutoresizingMaskIntoConstraints = false
     fieldSolidBackgroundView.isUserInteractionEnabled = false
@@ -396,17 +393,14 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     fieldSolidBackgroundView.layer.cornerCurve = .continuous
 
     fieldBackgroundView.translatesAutoresizingMaskIntoConstraints = false
-    fieldBackgroundView.isUserInteractionEnabled = false
+    fieldBackgroundView.isUserInteractionEnabled = true
     fieldBackgroundView.clipsToBounds = true
 
     fieldTintOverlayView.translatesAutoresizingMaskIntoConstraints = false
     fieldTintOverlayView.isUserInteractionEnabled = false
-    fieldTintOverlayView.clipsToBounds = true
-    fieldTintOverlayView.layer.cornerCurve = .continuous
 
     fieldContentView.translatesAutoresizingMaskIntoConstraints = false
     fieldContentView.backgroundColor = .clear
-    fieldContentView.clipsToBounds = true
     fieldContentView.layer.cornerCurve = .continuous
 
     fieldTapGestureRecognizer.cancelsTouchesInView = false
@@ -500,8 +494,8 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     fieldClipView.addGestureRecognizer(fieldTapGestureRecognizer)
     fieldClipView.addSubview(fieldSolidBackgroundView)
     fieldClipView.addSubview(fieldBackgroundView)
-    fieldClipView.addSubview(fieldTintOverlayView)
-    fieldClipView.addSubview(fieldContentView)
+    fieldBackgroundView.contentView.addSubview(fieldTintOverlayView)
+    fieldBackgroundView.contentView.addSubview(fieldContentView)
     fieldContentView.addSubview(searchButton)
     fieldContentView.addSubview(textView)
     fieldContentView.addSubview(placeholderLabel)
@@ -552,15 +546,15 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       fieldBackgroundView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
       fieldBackgroundView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
 
-      fieldTintOverlayView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
-      fieldTintOverlayView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
-      fieldTintOverlayView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
-      fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+      fieldTintOverlayView.leadingAnchor.constraint(equalTo: fieldBackgroundView.contentView.leadingAnchor),
+      fieldTintOverlayView.trailingAnchor.constraint(equalTo: fieldBackgroundView.contentView.trailingAnchor),
+      fieldTintOverlayView.topAnchor.constraint(equalTo: fieldBackgroundView.contentView.topAnchor),
+      fieldTintOverlayView.bottomAnchor.constraint(equalTo: fieldBackgroundView.contentView.bottomAnchor),
 
-      fieldContentView.leadingAnchor.constraint(equalTo: fieldClipView.leadingAnchor),
-      fieldContentView.trailingAnchor.constraint(equalTo: fieldClipView.trailingAnchor),
-      fieldContentView.topAnchor.constraint(equalTo: fieldClipView.topAnchor),
-      fieldContentView.bottomAnchor.constraint(equalTo: fieldClipView.bottomAnchor),
+      fieldContentView.leadingAnchor.constraint(equalTo: fieldBackgroundView.contentView.leadingAnchor),
+      fieldContentView.trailingAnchor.constraint(equalTo: fieldBackgroundView.contentView.trailingAnchor),
+      fieldContentView.topAnchor.constraint(equalTo: fieldBackgroundView.contentView.topAnchor),
+      fieldContentView.bottomAnchor.constraint(equalTo: fieldBackgroundView.contentView.bottomAnchor),
 
 	      searchButton.leadingAnchor.constraint(equalTo: fieldContentView.leadingAnchor, constant: compactHorizontalPadding - 4),
 	      searchButtonCenterYConstraint,
@@ -914,6 +908,19 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     return (widthConstraint, heightConstraint)
   }
 
+  /// Sets the icon tint for an accessory button configured via
+  /// `configureAccessoryButton`. These buttons carry a `UIButton.Configuration`
+  /// (needed for other styling), and a plain `tintColor` assignment isn't
+  /// reliably picked up for the button's image once a configuration is
+  /// present, so `baseForegroundColor` is set explicitly too.
+  private func setAccessoryTint(_ button: UIButton, _ color: UIColor?) {
+    button.tintColor = color
+    if #available(iOS 15.0, *), var config = button.configuration {
+      config.baseForegroundColor = color
+      button.configuration = config
+    }
+  }
+
   private func applyText(_ text: String) {
     guard textView.text != text else { return }
     isApplyingProgrammaticText = true
@@ -1187,31 +1194,20 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     updateFieldShape(for: requestedMinHeight)
 
     if #available(iOS 26.0, *) {
-      if fieldBaseColor != nil {
-        fieldBackgroundView.isHidden = true
-        fieldBackgroundView.effect = nil
-        fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
-      } else {
-        fieldBackgroundView.isHidden = false
-        fieldBackgroundView.effect = UIGlassEffect(style: .regular)
-        fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
-      }
-    } else if fieldBaseColor != nil {
-      fieldBackgroundView.isHidden = true
-      fieldBackgroundView.effect = nil
-      fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
+      fieldBackgroundView.effect = fieldBaseColor != nil ? nil : UIGlassEffect(style: .regular)
     } else {
-      fieldBackgroundView.isHidden = false
-      fieldBackgroundView.effect = currentBlurEffect()
-      fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
+      fieldBackgroundView.effect = fieldBaseColor != nil ? nil : currentBlurEffect()
     }
+    fieldTintOverlayView.backgroundColor = customFieldOverlayColor ?? .clear
 
     textView.textColor = .label
     textView.tintColor = currentTint ?? container.tintColor
     placeholderLabel.textColor = customPlaceholderColor ?? themedPlaceholderColor()
     placeholderLabel.font = textView.font
-    clearButton.tintColor =
+    setAccessoryTint(
+      clearButton,
       clearButtonIcon?.iconDataColor ?? customClearButtonColor ?? customPlaceholderColor ?? themedPlaceholderColor()
+    )
     clearButton.backgroundColor = .clear
     clearButton.layer.cornerRadius = 0
     cancelButton.tintColor = customCancelButtonColor ?? currentTint ?? container.tintColor
@@ -1220,12 +1216,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       (customCancelButtonColor ?? currentTint ?? container.tintColor).withAlphaComponent(disabledOpacity),
       for: .disabled
     )
-    searchButton.tintColor =
+    setAccessoryTint(
+      searchButton,
       leadingAccessoryIcon?.iconDataColor ?? customLeadingAccessoryColor ?? customPlaceholderColor ?? themedPlaceholderColor()
+    )
     searchButton.backgroundColor = .clear
     searchButton.layer.cornerRadius = 0
-    sendButton.tintColor =
-      sendButtonIcon?.iconDataColor ?? customSendButtonForegroundColor ?? .white
+    setAccessoryTint(sendButton, sendButtonIcon?.iconDataColor ?? customSendButtonForegroundColor ?? .white)
     sendButton.backgroundColor =
       customSendButtonBackgroundColor ?? currentTint ?? container.tintColor
     sendButton.layer.cornerRadius = sendButtonDiameter(for: requestedMinHeight) / 2
@@ -1234,7 +1231,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       let color = index < currentTrailingActions.count
         ? (currentTrailingActions[index].iconDataColor ?? currentTint ?? container.tintColor)
         : (currentTint ?? container.tintColor)
-      trailingButtons[index].tintColor = color
+      setAccessoryTint(trailingButtons[index], color)
       trailingButtons[index].backgroundColor = .clear
       trailingButtons[index].layer.cornerRadius = 0
     }
@@ -1397,16 +1394,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     defaultWeight: UIImage.SymbolWeight = .regular
   ) {
     if let action,
-       var image = Self.iconImage(
-        codePoint: action.iconDataCodePoint,
-        fontFamily: action.iconDataFontFamily,
-        fontPackage: action.iconDataFontPackage,
-        pointSize: actionIconPointSize(action),
-        fill: action.iconDataFill,
-        weight: action.iconDataWeight,
-        grade: action.iconDataGrade,
-        opticalSize: action.iconDataOpticalSize
-       ) {
+       var image = Self.resolvedIconImage(for: action, pointSize: actionIconPointSize(action)) {
       if action.iconDataMatchTextDirection {
         image = image.imageFlippedForRightToLeftLayoutDirection()
       }
@@ -1568,40 +1556,26 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     guard let items = raw as? [Any] else { return [] }
     var actions: [TrailingAction] = []
     for item in items.prefix(2) {
-      guard let dict = item as? [String: Any],
-            let codePoint = (dict["iconDataCodePoint"] as? NSNumber)?.intValue else {
+      guard let dict = item as? [String: Any], let action = Self.parseAccessoryIcon(dict) else {
         continue
       }
-      let fontFamily = dict["iconDataFontFamily"] as? String
-      let fontPackage = dict["iconDataFontPackage"] as? String
-      let matchTextDirection =
-        (dict["iconDataMatchTextDirection"] as? NSNumber)?.boolValue ?? false
-      let iconColor = Self.parseOptionalColor(dict["iconDataColor"])
-      let size = Self.parseOptionalCGFloat(dict["iconDataSize"]) ?? 16
-      actions.append(
-        TrailingAction(
-          iconDataCodePoint: codePoint,
-          iconDataFontFamily: fontFamily,
-          iconDataFontPackage: fontPackage,
-          iconDataMatchTextDirection: matchTextDirection,
-          iconDataColor: iconColor,
-          iconDataSize: size,
-          iconDataFill: Self.parseOptionalCGFloat(dict["iconDataFill"]),
-          iconDataWeight: Self.parseOptionalCGFloat(dict["iconDataWeight"]),
-          iconDataGrade: Self.parseOptionalCGFloat(dict["iconDataGrade"]),
-          iconDataOpticalSize: Self.parseOptionalCGFloat(dict["iconDataOpticalSize"])
-        )
-      )
+      actions.append(action)
     }
     return actions
   }
 
   private static func parseAccessoryIcon(_ raw: Any?) -> TrailingAction? {
-    guard let dict = raw as? [String: Any],
-          let codePoint = (dict["iconDataCodePoint"] as? NSNumber)?.intValue else {
-      return nil
+    guard let dict = raw as? [String: Any] else { return nil }
+    let name = dict["iconDataName"] as? String
+    let codePoint = (dict["iconDataCodePoint"] as? NSNumber)?.intValue
+    guard name != nil || codePoint != nil else { return nil }
+    let paletteColors = (dict["iconPaletteColors"] as? [Any])?.compactMap {
+      Self.parseOptionalColor($0)
     }
     return TrailingAction(
+      iconDataName: name,
+      iconRenderingMode: dict["iconRenderingMode"] as? String,
+      iconPaletteColors: (paletteColors?.isEmpty ?? true) ? nil : paletteColors,
       iconDataCodePoint: codePoint,
       iconDataFontFamily: dict["iconDataFontFamily"] as? String,
       iconDataFontPackage: dict["iconDataFontPackage"] as? String,
@@ -1620,15 +1594,9 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     currentTrailingActions = Array(actions.prefix(2))
     for index in 0..<trailingButtons.count {
       guard index < currentTrailingActions.count,
-            var image = Self.iconImage(
-              codePoint: currentTrailingActions[index].iconDataCodePoint,
-              fontFamily: currentTrailingActions[index].iconDataFontFamily,
-              fontPackage: currentTrailingActions[index].iconDataFontPackage,
-              pointSize: actionIconPointSize(currentTrailingActions[index]),
-              fill: currentTrailingActions[index].iconDataFill,
-              weight: currentTrailingActions[index].iconDataWeight,
-              grade: currentTrailingActions[index].iconDataGrade,
-              opticalSize: currentTrailingActions[index].iconDataOpticalSize
+            var image = Self.resolvedIconImage(
+              for: currentTrailingActions[index],
+              pointSize: actionIconPointSize(currentTrailingActions[index])
             ) else {
         trailingButtons[index].setImage(nil, for: .normal)
         trailingButtons[index].isHidden = true
@@ -1642,8 +1610,10 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       trailingButtons[index].setImage(image, for: .normal)
       trailingButtons[index].isHidden = false
       trailingButtonsEnabled[index] = true
-      trailingButtons[index].tintColor =
+      setAccessoryTint(
+        trailingButtons[index],
         currentTrailingActions[index].iconDataColor ?? currentTint ?? container.tintColor
+      )
     }
     refreshAccessoryButtons()
   }
@@ -1659,6 +1629,47 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
 
   private func clampedActionIconSize(_ action: TrailingAction) -> CGFloat {
     return min(accessoryButtonSize - 4, max(8, action.iconDataSize))
+  }
+
+  /// Resolves a [TrailingAction] to a `UIImage`, preferring an SF Symbol
+  /// looked up by name (`iconDataName`) and falling back to a Flutter icon
+  /// font glyph rendered from a codepoint (`iconDataCodePoint`).
+  private static func resolvedIconImage(for action: TrailingAction, pointSize: CGFloat) -> UIImage? {
+    if let name = action.iconDataName, var image = UIImage(systemName: name) {
+      image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(pointSize: pointSize)) ?? image
+      switch action.iconRenderingMode {
+      case "hierarchical":
+        if #available(iOS 15.0, *), let color = action.iconDataColor {
+          image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(hierarchicalColor: color)) ?? image
+          return image.withRenderingMode(.alwaysOriginal)
+        }
+      case "palette":
+        if #available(iOS 15.0, *), let colors = action.iconPaletteColors, !colors.isEmpty {
+          image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(paletteColors: colors)) ?? image
+          return image.withRenderingMode(.alwaysOriginal)
+        }
+      case "multicolor":
+        if #available(iOS 15.0, *) {
+          image = image.applyingSymbolConfiguration(.preferringMulticolor()) ?? image
+          return image.withRenderingMode(.alwaysOriginal)
+        }
+      default:
+        break
+      }
+      return image.withRenderingMode(.alwaysTemplate)
+    }
+
+    guard let codePoint = action.iconDataCodePoint else { return nil }
+    return Self.iconImage(
+      codePoint: codePoint,
+      fontFamily: action.iconDataFontFamily,
+      fontPackage: action.iconDataFontPackage,
+      pointSize: pointSize,
+      fill: action.iconDataFill,
+      weight: action.iconDataWeight,
+      grade: action.iconDataGrade,
+      opticalSize: action.iconDataOpticalSize
+    )
   }
 
   private static func iconImage(
