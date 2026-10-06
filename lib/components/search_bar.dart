@@ -1131,6 +1131,8 @@ class _CNTextFieldState extends State<CNTextField>
       'behavior': _encodeBehavior(),
       'layout': _encodeLayout(),
       'style': _encodeStyle(),
+      'icons': _encodeIcons(),
+      'traillingActions': _encodeTrailingActionsPayload(),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
