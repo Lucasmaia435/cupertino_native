@@ -918,6 +918,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     if #available(iOS 15.0, *), var config = button.configuration {
       config.baseForegroundColor = color
       button.configuration = config
+      button.setNeedsUpdateConfiguration()
     }
   }
 
@@ -1389,12 +1390,17 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   private func applyAccessoryIcon(
     to button: UIButton,
     action: TrailingAction?,
+    fallbackColor: UIColor,
     defaultSystemName: String,
     defaultPointSize: CGFloat,
     defaultWeight: UIImage.SymbolWeight = .regular
   ) {
     if let action,
-       var image = Self.resolvedIconImage(for: action, pointSize: actionIconPointSize(action)) {
+       var image = Self.resolvedIconImage(
+         for: action,
+         pointSize: actionIconPointSize(action),
+         fallbackColor: fallbackColor
+       ) {
       if action.iconDataMatchTextDirection {
         image = image.imageFlippedForRightToLeftLayoutDirection()
       }
@@ -1415,18 +1421,21 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     applyAccessoryIcon(
       to: clearButton,
       action: clearButtonIcon,
+      fallbackColor: customClearButtonColor ?? customPlaceholderColor ?? themedPlaceholderColor(),
       defaultSystemName: "xmark.circle.fill",
       defaultPointSize: 18
     )
     applyAccessoryIcon(
       to: searchButton,
       action: leadingAccessoryIcon,
+      fallbackColor: customLeadingAccessoryColor ?? customPlaceholderColor ?? themedPlaceholderColor(),
       defaultSystemName: "magnifyingglass",
       defaultPointSize: 18
     )
     applyAccessoryIcon(
       to: sendButton,
       action: sendButtonIcon,
+      fallbackColor: customSendButtonForegroundColor ?? .white,
       defaultSystemName: "arrow.up",
       defaultPointSize: defaultSendButtonIconSize,
       defaultWeight: .medium
@@ -1449,7 +1458,13 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     )
     let centersSendButton = showsSendButton && resolvedFieldHeight <= requestedMinHeight + 0.5
     let alignsToFieldCenter = showsLeadingAccessory || !resolvedHasText || centersSendButton
-    trailingStackFirstLineCenterYConstraint.isActive = false
+    // Neither "centered in the field" nor "pinned to the send button" applies
+    // once there's text, no leading accessory, and the slot shows plain
+    // actions rather than the send button: without an active constraint here
+    // the stack freezes at its last position (the single-line center) and
+    // visually drifts toward the top as the field grows with more lines.
+    let pinsToFirstLine = !alignsToFieldCenter && !showsSendButton
+    trailingStackFirstLineCenterYConstraint.isActive = pinsToFirstLine
     trailingStackCenterYConstraint.isActive = alignsToFieldCenter
     trailingStackBottomConstraint.isActive = showsSendButton && !centersSendButton
     trailingStackTrailingConstraint.constant = showsSendButton
@@ -1596,7 +1611,8 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       guard index < currentTrailingActions.count,
             var image = Self.resolvedIconImage(
               for: currentTrailingActions[index],
-              pointSize: actionIconPointSize(currentTrailingActions[index])
+              pointSize: actionIconPointSize(currentTrailingActions[index]),
+              fallbackColor: currentTint ?? container.tintColor
             ) else {
         trailingButtons[index].setImage(nil, for: .normal)
         trailingButtons[index].isHidden = true
@@ -1634,13 +1650,25 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
   /// Resolves a [TrailingAction] to a `UIImage`, preferring an SF Symbol
   /// looked up by name (`iconDataName`) and falling back to a Flutter icon
   /// font glyph rendered from a codepoint (`iconDataCodePoint`).
-  private static func resolvedIconImage(for action: TrailingAction, pointSize: CGFloat) -> UIImage? {
+  // Bakes the resolved color directly into the returned image (`.alwaysOriginal`)
+  // instead of returning a template image tinted via `tintColor`/
+  // `UIButtonConfiguration.baseForegroundColor`. Accessory buttons carry a
+  // `UIButtonConfiguration` (needed for other styling), and template images
+  // set through the legacy `setImage(_:for:)` API have shown inconsistent
+  // tinting once a configuration is also present — baking the color in
+  // sidesteps that interaction entirely.
+  private static func resolvedIconImage(
+    for action: TrailingAction,
+    pointSize: CGFloat,
+    fallbackColor: UIColor
+  ) -> UIImage? {
+    let resolvedColor = action.iconDataColor ?? fallbackColor
     if let name = action.iconDataName, var image = UIImage(systemName: name) {
       image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(pointSize: pointSize)) ?? image
       switch action.iconRenderingMode {
       case "hierarchical":
-        if #available(iOS 15.0, *), let color = action.iconDataColor {
-          image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(hierarchicalColor: color)) ?? image
+        if #available(iOS 15.0, *) {
+          image = image.applyingSymbolConfiguration(UIImage.SymbolConfiguration(hierarchicalColor: resolvedColor)) ?? image
           return image.withRenderingMode(.alwaysOriginal)
         }
       case "palette":
@@ -1656,7 +1684,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       default:
         break
       }
-      return image.withRenderingMode(.alwaysTemplate)
+      return image.withTintColor(resolvedColor, renderingMode: .alwaysOriginal)
     }
 
     guard let codePoint = action.iconDataCodePoint else { return nil }
@@ -1665,6 +1693,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       fontFamily: action.iconDataFontFamily,
       fontPackage: action.iconDataFontPackage,
       pointSize: pointSize,
+      color: resolvedColor,
       fill: action.iconDataFill,
       weight: action.iconDataWeight,
       grade: action.iconDataGrade,
@@ -1677,6 +1706,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
     fontFamily: String?,
     fontPackage: String?,
     pointSize: CGFloat,
+    color: UIColor,
     fill: CGFloat?,
     weight: CGFloat?,
     grade: CGFloat?,
@@ -1700,7 +1730,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       paragraph.alignment = .center
       let attrs: [NSAttributedString.Key: Any] = [
         .font: resolvedFont,
-        .foregroundColor: UIColor.white,
+        .foregroundColor: color,
         .paragraphStyle: paragraph
       ]
       let glyphSize = glyph.size(withAttributes: attrs)
@@ -1712,7 +1742,7 @@ class CupertinoSearchBarPlatformView: NSObject, FlutterPlatformView, UITextViewD
       )
       glyph.draw(in: rect, withAttributes: attrs)
     }
-    return image.withRenderingMode(.alwaysTemplate)
+    return image.withRenderingMode(.alwaysOriginal)
   }
 
   private static func loadIconFont(
